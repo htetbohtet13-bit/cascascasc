@@ -32,7 +32,7 @@ begin
   insert into public.profiles (id, phone)
   values (
     new.id,
-    coalesce(new.phone, new.raw_user_meta_data ->> 'phone')
+    coalesce(new.raw_user_meta_data ->> 'phone', new.phone)
   );
   return new;
 end;

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { authenticate, signOut } from "./lib/auth";
+import { issueGameToken, launchGame, loadSlotBets, type GameSession, type SlotBet } from "./lib/game";
 import { supabase } from "./lib/supabase";
 import "./App.css";
 
@@ -8,12 +9,16 @@ type Mode = "signin" | "signup";
 
 type Profile = {
   phone: string;
+  balance: number;
+  game_uid: string;
   created_at: string;
 };
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [bets, setBets] = useState<SlotBet[]>([]);
+  const [gameSession, setGameSession] = useState<GameSession | null>(null);
   const [ready, setReady] = useState(false);
   const [mode, setMode] = useState<Mode>("signin");
   const [phone, setPhone] = useState("");
@@ -21,6 +26,7 @@ export default function App() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -38,17 +44,23 @@ export default function App() {
   useEffect(() => {
     if (!session) {
       setProfile(null);
+      setBets([]);
+      setGameSession(null);
       return;
     }
 
     supabase
       .from("profiles")
-      .select("phone, created_at")
+      .select("phone, balance, game_uid, created_at")
       .eq("id", session.user.id)
       .maybeSingle()
       .then(({ data }) => {
         setProfile(data);
       });
+
+    loadSlotBets(session.user.id)
+      .then(setBets)
+      .catch(() => setBets([]));
   }, [session]);
 
   async function onSubmit(event: FormEvent) {
@@ -84,6 +96,31 @@ export default function App() {
     }
   }
 
+  async function onPlayBuffalo() {
+    setPlaying(true);
+    setError("");
+    try {
+      const url = await launchGame(23, 1);
+      window.location.assign(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open the game");
+      setPlaying(false);
+    }
+  }
+
+  async function onCreateGameSession() {
+    setBusy(true);
+    setError("");
+    try {
+      const next = await issueGameToken();
+      setGameSession(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create game session");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!ready) {
     return (
       <main className="page">
@@ -98,18 +135,88 @@ export default function App() {
       session.user.phone ??
       (session.user.user_metadata?.phone as string | undefined) ??
       "—";
+    const balance = profile?.balance ?? 0;
 
     return (
       <main className="page">
         <section className="card">
           <p className="eyebrow">Signed in</p>
           <h1>Welcome</h1>
+          <p className="balance">{balance.toLocaleString()} pts</p>
           <dl className="details">
             <div>
               <dt>Phone</dt>
               <dd>{phoneNumber}</dd>
             </div>
+            <div>
+              <dt>UID</dt>
+              <dd className="mono">{profile?.game_uid ?? "—"}</dd>
+            </div>
           </dl>
+
+          <div className="games">
+            <p className="section-label">Games</p>
+            <article className="game-card">
+              <div>
+                <p className="eyebrow">Slot</p>
+                <h2>Buffalo</h2>
+                <p className="muted">Game 23 · Room 1</p>
+              </div>
+              <button type="button" onClick={onPlayBuffalo} disabled={playing || busy}>
+                {playing ? "Opening…" : "Play"}
+              </button>
+            </article>
+          </div>
+
+          <div className="session">
+            <p className="section-label">Game session</p>
+            <p className="muted">
+              Create a token, then the game vendor can call balance and change-balance
+              with this uid and token.
+            </p>
+            {gameSession ? (
+              <dl className="session-box">
+                <div>
+                  <dt>uid</dt>
+                  <dd>{gameSession.uid}</dd>
+                </div>
+                <div>
+                  <dt>token</dt>
+                  <dd>{gameSession.token}</dd>
+                </div>
+              </dl>
+            ) : null}
+            <button type="button" className="secondary" onClick={onCreateGameSession} disabled={busy}>
+              {busy ? "Please wait…" : gameSession ? "Refresh token" : "Create game session"}
+            </button>
+          </div>
+
+          {bets.length > 0 ? (
+            <div className="bets-wrap">
+              <p className="section-label">Recent bets</p>
+              <table className="bets">
+                <thead>
+                  <tr>
+                    <th>Bet</th>
+                    <th>Win</th>
+                    <th>Change</th>
+                    <th>Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bets.map((bet) => (
+                    <tr key={bet.bet_uid}>
+                      <td>{bet.bet}</td>
+                      <td>{bet.win}</td>
+                      <td>{bet.changemoney}</td>
+                      <td>{bet.balance_after}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
           {error ? <p className="error">{error}</p> : null}
           <button type="button" onClick={onSignOut} disabled={busy}>
             {busy ? "Signing out…" : "Sign out"}

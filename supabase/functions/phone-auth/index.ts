@@ -14,10 +14,8 @@ function json(body: unknown, status = 200) {
   });
 }
 
-export function normalizePhone(input: string): string | null {
-  const trimmed = input.trim();
-  const hasPlus = trimmed.startsWith("+");
-  const digits = trimmed.replace(/\D/g, "");
+function normalizePhone(input: string): string | null {
+  const digits = input.trim().replace(/\D/g, "");
 
   if (digits.length < 8 || digits.length > 15) return null;
 
@@ -29,7 +27,6 @@ export function normalizePhone(input: string): string | null {
     return `+${digits}`;
   }
 
-  if (hasPlus) return `+${digits}`;
   return `+${digits}`;
 }
 
@@ -73,8 +70,12 @@ Deno.serve(async (req) => {
     return json({ error: "Enter a valid phone number" }, 400);
   }
 
-  if (password.length < 6) {
+  if (action === "signup" && password.length < 6) {
     return json({ error: "Password must be at least 6 characters" }, 400);
+  }
+
+  if (!password) {
+    return json({ error: "Enter a password" }, 400);
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
@@ -83,6 +84,8 @@ Deno.serve(async (req) => {
   const anon = createClient(supabaseUrl, anonKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+
+  const email = phoneToEmail(phone);
 
   if (action === "signup") {
     const { data: existing } = await admin
@@ -95,62 +98,31 @@ Deno.serve(async (req) => {
       return json({ error: "This phone number is already registered" }, 409);
     }
 
-    const phoneCreate = await admin.auth.admin.createUser({
-      phone,
+    const created = await admin.auth.admin.createUser({
+      email,
       password,
-      phone_confirm: true,
+      email_confirm: true,
       user_metadata: { phone },
     });
 
-    let loginWith: { phone?: string; email?: string } = { phone };
-
-    if (phoneCreate.error) {
-      const emailCreate = await admin.auth.admin.createUser({
-        email: phoneToEmail(phone),
-        password,
-        email_confirm: true,
-        user_metadata: { phone },
-      });
-
-      if (emailCreate.error) {
-        const message = emailCreate.error.message.toLowerCase();
-        if (message.includes("already") || message.includes("registered")) {
-          return json({ error: "This phone number is already registered" }, 409);
-        }
-        return json({ error: emailCreate.error.message }, 400);
+    if (created.error) {
+      const message = created.error.message.toLowerCase();
+      if (message.includes("already") || message.includes("registered")) {
+        return json({ error: "This phone number is already registered" }, 409);
       }
-
-      loginWith = { email: phoneToEmail(phone) };
+      return json({ error: created.error.message }, 400);
     }
-
-    const signIn = await anon.auth.signInWithPassword({
-      ...loginWith,
-      password,
-    } as { phone?: string; email?: string; password: string });
-
-    if (signIn.error || !signIn.data.session) {
-      return json(
-        { error: signIn.error?.message ?? "Account created. Please sign in." },
-        400,
-      );
-    }
-
-    return json({ session: signIn.data.session });
   }
 
-  const phoneSignIn = await anon.auth.signInWithPassword({ phone, password });
-  if (!phoneSignIn.error && phoneSignIn.data.session) {
-    return json({ session: phoneSignIn.data.session });
+  const signIn = await anon.auth.signInWithPassword({ email, password });
+
+  if (signIn.error || !signIn.data.session) {
+    const message =
+      action === "signup"
+        ? (signIn.error?.message ?? "Account created. Please sign in.")
+        : "Invalid phone number or password";
+    return json({ error: message }, action === "signup" ? 400 : 401);
   }
 
-  const emailSignIn = await anon.auth.signInWithPassword({
-    email: phoneToEmail(phone),
-    password,
-  });
-
-  if (emailSignIn.error || !emailSignIn.data.session) {
-    return json({ error: "Invalid phone number or password" }, 401);
-  }
-
-  return json({ session: emailSignIn.data.session });
+  return json({ session: signIn.data.session });
 });

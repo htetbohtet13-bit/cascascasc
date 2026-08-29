@@ -15,19 +15,22 @@ export async function authenticate(action: AuthAction, phone: string, password: 
     body: { action, phone, password },
   });
 
-  if (error) {
-    let message = error.message;
-    try {
-      const body = await (error as { context?: Response }).context?.json();
-      if (body?.error) message = body.error;
-    } catch {
-      // keep the original message
-    }
-    throw new Error(message);
-  }
-
   if (data?.error) {
     throw new Error(data.error);
+  }
+
+  if (error) {
+    let message = error.message;
+    const response = (error as { context?: Response }).context;
+    if (response) {
+      try {
+        const body = (await response.clone().json()) as AuthResponse;
+        if (body.error) message = body.error;
+      } catch {
+        // keep the original message
+      }
+    }
+    throw new Error(message);
   }
 
   if (!data?.session?.access_token || !data.session.refresh_token) {
