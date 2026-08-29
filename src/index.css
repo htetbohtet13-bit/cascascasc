@@ -1,0 +1,31 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  line-height: 1.4;
+  font-weight: 400;
+  color: #f4efe4;
+  background: #0d0c0a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, #2a2112 0%, transparent 42%),
+    #0d0c0a;
+}
+
+button,
+input {
+  font: inherit;
+}
