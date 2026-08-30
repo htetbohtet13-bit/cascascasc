@@ -1,18 +1,53 @@
-function formBody(req) {
-  if (typeof req.body === "string") return req.body;
-  if (Buffer.isBuffer(req.body)) return req.body.toString("utf8");
-  if (req.body && typeof req.body === "object") {
-    return new URLSearchParams(
-      Object.entries(req.body).map(([key, value]) => [key, String(value ?? "")]),
-    ).toString();
+function asRecord(value) {
+  if (!value || typeof value !== "object" || Buffer.isBuffer(value)) return {};
+  const params = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry == null || typeof entry === "object") continue;
+    params[key] = String(entry).trim();
   }
-  return "";
+  return params;
+}
+
+function parseText(text) {
+  const raw = (text ?? "").trim();
+  if (!raw) return {};
+  if (raw.startsWith("{")) {
+    try {
+      return asRecord(JSON.parse(raw));
+    } catch {
+      return {};
+    }
+  }
+  return Object.fromEntries(
+    [...new URLSearchParams(raw)].map(([key, value]) => [key, value.trim()]),
+  );
+}
+
+function collectParams(req) {
+  const params = {};
+  try {
+    const url = new URL(req.url, "http://localhost");
+    for (const [key, value] of url.searchParams) params[key] = value.trim();
+  } catch {
+    // ignore malformed urls
+  }
+
+  Object.assign(params, asRecord(req.query));
+
+  if (typeof req.body === "string" || Buffer.isBuffer(req.body)) {
+    Object.assign(params, parseText(String(req.body)));
+  } else {
+    Object.assign(params, asRecord(req.body));
+  }
+
+  return params;
 }
 
 export async function proxySlot(req, res, functionPath) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "content-type");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+  res.setHeader("Cache-Control", "no-store");
 
   if (req.method === "OPTIONS") {
     res.status(204).end();
@@ -23,26 +58,22 @@ export async function proxySlot(req, res, functionPath) {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY;
 
   if (!functionPath || !supabaseUrl || !anonKey) {
-    res.status(404).json({ code: 0, msg: "Not found" });
+    res.status(200).json({ code: 0, msg: "Not found" });
     return;
   }
 
   const forwarded = await fetch(`${supabaseUrl}${functionPath}`, {
-    method: req.method ?? "POST",
+    method: "POST",
     headers: {
-      "Content-Type":
-        req.headers["content-type"] ?? "application/x-www-form-urlencoded",
+      "Content-Type": "application/x-www-form-urlencoded",
       Authorization: `Bearer ${anonKey}`,
       apikey: anonKey,
     },
-    body: req.method === "GET" || req.method === "HEAD" ? undefined : formBody(req),
+    body: new URLSearchParams(collectParams(req)).toString(),
   });
 
-  const payload = Buffer.from(await forwarded.arrayBuffer());
-  res.status(forwarded.status);
-  res.setHeader(
-    "Content-Type",
-    forwarded.headers.get("Content-Type") ?? "application/json",
-  );
-  res.send(payload);
+  const payload = await forwarded.text();
+  res.status(200);
+  res.setHeader("Content-Type", "application/json");
+  res.send(payload || JSON.stringify({ code: 0 }));
 }

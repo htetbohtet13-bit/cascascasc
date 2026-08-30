@@ -5,13 +5,17 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
   });
 }
 
@@ -22,27 +26,36 @@ function toInt(value: string | undefined) {
   return Math.trunc(parsed);
 }
 
+function fromObject(body: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(body).map(([key, value]) => [key, String(value ?? "").trim()]),
+  );
+}
+
 async function parseParams(req: Request): Promise<Record<string, string>> {
+  const params: Record<string, string> = {};
+  const url = new URL(req.url);
+  for (const [key, value] of url.searchParams) params[key] = value.trim();
+
+  if (req.method === "GET" || req.method === "HEAD") return params;
+
   const contentType = req.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
-    const body = (await req.json()) as Record<string, unknown>;
-    return Object.fromEntries(
-      Object.entries(body).map(([key, value]) => [key, String(value ?? "").trim()]),
-    );
+    return { ...params, ...fromObject((await req.json()) as Record<string, unknown>) };
   }
 
   const text = await req.text();
-  if (!text) return {};
+  if (!text) return params;
   if (text.trim().startsWith("{")) {
-    const body = JSON.parse(text) as Record<string, unknown>;
-    return Object.fromEntries(
-      Object.entries(body).map(([key, value]) => [key, String(value ?? "").trim()]),
-    );
+    return { ...params, ...fromObject(JSON.parse(text) as Record<string, unknown>) };
   }
 
-  return Object.fromEntries(
-    [...new URLSearchParams(text)].map(([key, value]) => [key, value.trim()]),
-  );
+  return {
+    ...params,
+    ...Object.fromEntries(
+      [...new URLSearchParams(text)].map(([key, value]) => [key, value.trim()]),
+    ),
+  };
 }
 
 Deno.serve(async (req) => {
@@ -50,7 +63,7 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  if (req.method !== "POST") {
+  if (req.method !== "POST" && req.method !== "GET") {
     return json({ code: 0 });
   }
 
