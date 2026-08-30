@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { handleGameLogin } from "./game-login.mjs";
+import { isAllowedSlotCaller } from "./slot-allowlist.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -82,6 +83,12 @@ const server = http.createServer(async (req, res) => {
   if (!functionPath || !supabaseUrl || !anonKey) {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ code: 0, msg: "Not found" }));
+    return;
+  }
+
+  if (!isAllowedSlotCaller(req)) {
+    res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
+    res.end(JSON.stringify({ code: 0 }));
     return;
   }
 

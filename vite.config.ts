@@ -3,6 +3,7 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import type { IncomingMessage } from "node:http";
 import { handleGameLogin } from "./server/game-login.mjs";
+import { isAllowedSlotCaller } from "./server/slot-allowlist.mjs";
 
 function readDotEnv(cwd: string) {
   const env: Record<string, string> = {};
@@ -115,6 +116,13 @@ function slotPartnerProxy(env: Record<string, string>): Plugin {
           res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
           res.setHeader("Access-Control-Allow-Headers", "content-type");
           res.end();
+          return;
+        }
+
+        if (!isAllowedSlotCaller(req)) {
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ code: 0 }));
           return;
         }
 

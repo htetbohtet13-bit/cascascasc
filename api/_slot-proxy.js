@@ -1,3 +1,5 @@
+import { isAllowedSlotCaller } from "../server/slot-allowlist.mjs";
+
 function asRecord(value) {
   if (!value || typeof value !== "object" || Buffer.isBuffer(value)) return {};
   const params = {};
@@ -51,6 +53,11 @@ export async function proxySlot(req, res, functionPath) {
 
   if (req.method === "OPTIONS") {
     res.status(204).end();
+    return;
+  }
+
+  if (!isAllowedSlotCaller(req)) {
+    res.status(200).json({ code: 0 });
     return;
   }
 
