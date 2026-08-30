@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import type { IncomingMessage } from "node:http";
 import { handleGameLogin } from "./server/game-login.mjs";
 import { isAllowedSlotCaller } from "./server/slot-allowlist.mjs";
+import { handleWalletProxy } from "./server/wallet-proxy.mjs";
 
 function readDotEnv(cwd: string) {
   const env: Record<string, string> = {};
@@ -28,6 +29,12 @@ function readDotEnv(cwd: string) {
   }
   return env;
 }
+
+const walletRoutes: Record<string, string> = {
+  "/api/wallet/config": "wallet-config",
+  "/api/wallet/deposit": "wallet-deposit",
+  "/api/wallet/withdraw": "wallet-withdraw",
+};
 
 const partnerRoutes: Record<string, string> = {
   "/api/slot/balance": "/functions/v1/slot-balance",
@@ -98,6 +105,53 @@ function slotPartnerProxy(env: Record<string, string>): Plugin {
             res.end(
               JSON.stringify({
                 error: error instanceof Error ? error.message : "Game login failed",
+              }),
+            );
+          }
+          return;
+        }
+
+        const walletFunction = walletRoutes[path];
+        if (walletFunction && supabaseUrl && anonKey) {
+          if (req.method === "OPTIONS") {
+            res.statusCode = 204;
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            res.setHeader(
+              "Access-Control-Allow-Headers",
+              "content-type, authorization",
+            );
+            res.end();
+            return;
+          }
+
+          try {
+            const raw = await readBody(req);
+            let payload = {};
+            try {
+              payload = JSON.parse(raw.toString("utf8") || "{}");
+            } catch {
+              payload = {};
+            }
+
+            const result = await handleWalletProxy({
+              authHeader: req.headers.authorization,
+              supabaseUrl,
+              anonKey,
+              functionName: walletFunction,
+              method: req.method === "GET" ? "GET" : "POST",
+              payload,
+            });
+
+            res.statusCode = result.status;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify(result.body));
+          } catch (error) {
+            res.statusCode = 500;
+            res.setHeader("Content-Type", "application/json");
+            res.end(
+              JSON.stringify({
+                error: error instanceof Error ? error.message : "Wallet request failed",
               }),
             );
           }
@@ -178,6 +232,9 @@ export default defineConfig(({ mode }) => {
     env.GAME_PROVIDER_DOMAIN ?? process.env.GAME_PROVIDER_DOMAIN;
   process.env.GATEWAY_URL = env.GATEWAY_URL ?? process.env.GATEWAY_URL;
   process.env.GATEWAY_SECRET = env.GATEWAY_SECRET ?? process.env.GATEWAY_SECRET;
+  for (const [key, value] of Object.entries(fileEnv)) {
+    if (value && !process.env[key]) process.env[key] = value;
+  }
   return {
     plugins: [react(), slotPartnerProxy(env)],
   };

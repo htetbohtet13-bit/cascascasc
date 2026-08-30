@@ -18,6 +18,15 @@
     },
     "api/slot/change-balance.js": {
       "includeFiles": "server/**"
+    },
+    "api/wallet/config.js": {
+      "includeFiles": "server/**"
+    },
+    "api/wallet/deposit.js": {
+      "includeFiles": "server/**"
+    },
+    "api/wallet/withdraw.js": {
+      "includeFiles": "server/**"
     }
   },
   "rewrites": [

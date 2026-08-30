@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { authenticate, signOut } from "./lib/auth";
 import { issueGameToken, launchGame, loadSlotBets, type GameSession, type SlotBet } from "./lib/game";
 import { supabase } from "./lib/supabase";
+import Wallet from "./Wallet";
 import "./App.css";
 
 type Mode = "signin" | "signup";
@@ -27,6 +28,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [walletOpen, setWalletOpen] = useState(false);
+  const [walletMode, setWalletMode] = useState<"deposit" | "withdraw">("deposit");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -137,12 +140,49 @@ export default function App() {
       "—";
     const balance = profile?.balance ?? 0;
 
+    if (walletOpen) {
+      return (
+        <main className="page">
+          <Wallet
+            initialMode={walletMode}
+            defaultPhone={phoneNumber === "—" ? "" : phoneNumber}
+            onClose={() => setWalletOpen(false)}
+            onBalance={(next) =>
+              setProfile((current) => (current ? { ...current, balance: next } : current))
+            }
+          />
+        </main>
+      );
+    }
+
     return (
       <main className="page">
         <section className="card">
           <p className="eyebrow">Signed in</p>
           <h1>Welcome</h1>
           <p className="balance">{balance.toLocaleString()} pts</p>
+          <div className="wallet-actions">
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setWalletMode("deposit");
+                setWalletOpen(true);
+              }}
+            >
+              Deposit
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setWalletMode("withdraw");
+                setWalletOpen(true);
+              }}
+            >
+              Withdraw
+            </button>
+          </div>
           <dl className="details">
             <div>
               <dt>Phone</dt>

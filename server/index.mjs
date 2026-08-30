@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { handleGameLogin } from "./game-login.mjs";
 import { isAllowedSlotCaller } from "./slot-allowlist.mjs";
+import { handleWalletProxy } from "./wallet-proxy.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -69,6 +70,39 @@ const server = http.createServer(async (req, res) => {
       domain: process.env.GAME_PROVIDER_DOMAIN,
       gatewayUrl: process.env.GATEWAY_URL,
       gatewaySecret: process.env.GATEWAY_SECRET,
+    });
+
+    res.writeHead(result.status, {
+      "Content-Type": "application/json",
+      ...corsHeaders,
+    });
+    res.end(JSON.stringify(result.body));
+    return;
+  }
+
+  const walletFunction = {
+    "/api/wallet/config": "wallet-config",
+    "/api/wallet/deposit": "wallet-deposit",
+    "/api/wallet/withdraw": "wallet-withdraw",
+  }[path];
+
+  if (walletFunction) {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    let payload = {};
+    try {
+      payload = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+    } catch {
+      payload = {};
+    }
+
+    const result = await handleWalletProxy({
+      authHeader: req.headers.authorization,
+      supabaseUrl,
+      anonKey,
+      functionName: walletFunction,
+      method: req.method === "GET" ? "GET" : "POST",
+      payload,
     });
 
     res.writeHead(result.status, {
