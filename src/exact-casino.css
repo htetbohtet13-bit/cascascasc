@@ -1,0 +1,90 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;500;600;700;800;900&display=swap');
+
+html, body, button, input {
+  font-family: 'Noto Sans Myanmar', 'Myanmar Text', 'Pyidaungsu', sans-serif;
+}
+
+::-webkit-scrollbar { display: none; }
+* { scrollbar-width: none; }
+
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmerMove {
+  from { background-position: -400% 0; }
+  to   { background-position: 400% 0; }
+}
+@keyframes floatCard {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50%       { transform: translateY(-6px) rotate(1.5deg); }
+}
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 4px 20px rgba(45,126,255,0.4), 0 0 0 0 rgba(45,126,255,0); }
+  50%       { box-shadow: 0 4px 40px rgba(45,126,255,0.9), 0 0 40px rgba(45,126,255,0.25); }
+}
+@keyframes gradientPan {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes slideUpSheet {
+  from { transform: translateX(-50%) translateY(110%) scale(0.96); }
+  to   { transform: translateX(-50%) translateY(0) scale(1); }
+}
+@keyframes ringPulse {
+  0%   { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+@keyframes characterBob {
+  0%, 100% { transform: translateY(0px) rotate(-4deg) scale(1); }
+  50%       { transform: translateY(-10px) rotate(4deg) scale(1.04); }
+}
+@keyframes coinSpin {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(360deg); }
+}
+@keyframes scaleIn {
+  from { transform: scale(0.82); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+@keyframes receiptSlotPulse {
+  0%, 100% {
+    border-color: rgba(96, 165, 250, 0.45);
+    box-shadow: 0 0 0 0 rgba(67, 140, 255, 0.0), inset 0 0 0 1px rgba(67, 140, 255, 0.05);
+  }
+  50% {
+    border-color: rgba(147, 197, 253, 0.95);
+    box-shadow: 0 0 22px rgba(67, 140, 255, 0.35), inset 0 0 0 1px rgba(147, 197, 253, 0.2);
+  }
+}
+@keyframes receiptCaretBlink {
+  0%, 45% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+@keyframes welcomeBonusIn {
+  from { transform: translate(-50%, -46%) scale(0.9); opacity: 0; }
+  to   { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+@keyframes navBounce {
+  0%   { transform: translateY(0); }
+  35%  { transform: translateY(-5px); }
+  65%  { transform: translateY(-2px); }
+  100% { transform: translateY(0); }
+}
+@keyframes sparkle {
+  0%, 100% { opacity: 0; transform: scale(0.4) rotate(0deg); }
+  50%       { opacity: 1; transform: scale(1.2) rotate(180deg); }
+}
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes bannerContentIn {
+  from { opacity: 0; transform: translateX(18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes bannerContentOut {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-18px); }
+}

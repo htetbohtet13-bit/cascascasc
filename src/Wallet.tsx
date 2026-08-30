@@ -16,9 +16,9 @@ type Props = {
   onBalance: (balance: number) => void;
 };
 
-const methods: { id: PayMethod; name: string }[] = [
-  { id: "kbzpay", name: "KBZPay" },
-  { id: "wavepay", name: "WavePay" },
+const methods: { id: PayMethod; name: string; img: string; cls: string }[] = [
+  { id: "kbzpay", name: "KBZPay", img: "/images/design-mode/kpay.png", cls: "kbz" },
+  { id: "wavepay", name: "WavePay", img: "/images/design-mode/wavepay.png", cls: "wave" },
 ];
 
 export default function Wallet({
@@ -45,6 +45,7 @@ export default function Wallet({
   }, []);
 
   const receiver = method && config ? config[method].receiver : "";
+  const quickAmounts = mode === "deposit" ? ["5000", "10000", "20000"] : ["1000", "2000", "4000"];
 
   function resetFlow(nextMode: Mode) {
     setMode(nextMode);
@@ -87,10 +88,18 @@ export default function Wallet({
   }
 
   return (
-    <section className="card">
-      <p className="eyebrow">Wallet</p>
-      <h1>{mode === "deposit" ? "Deposit" : "Withdraw"}</h1>
-      <div className="tabs" role="tablist">
+    <section className="wallet-sheet">
+      <div className="wallet-head">
+        <h2>ပိုက်ဆံအိတ်</h2>
+        <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="wallet-tabs" role="tablist">
         <button
           type="button"
           role="tab"
@@ -98,7 +107,7 @@ export default function Wallet({
           className={mode === "deposit" ? "active" : ""}
           onClick={() => resetFlow("deposit")}
         >
-          Deposit
+          ငွေသွင်း
         </button>
         <button
           type="button"
@@ -107,118 +116,144 @@ export default function Wallet({
           className={mode === "withdraw" ? "active" : ""}
           onClick={() => resetFlow("withdraw")}
         >
-          Withdraw
+          ငွေထုတ်
         </button>
       </div>
 
-      <p className="step-label">Step {Math.min(step, 3)} of 3</p>
+      <div className="wallet-body">
+        {step === 1 ? (
+          <>
+            <p className="wallet-title">ဘဏ်ရွေးပါ</p>
+            <p className="wallet-sub">သင်အသုံးပြုမည့် ဘဏ်ကိုရွေးပါ</p>
+            <div className="bank-grid">
+              {methods.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`bank-card ${item.cls}`}
+                  onClick={() => chooseMethod(item.id)}
+                >
+                  <img src={item.img} alt="" />
+                  {item.name}
+                </button>
+              ))}
+            </div>
+            {error ? <p className="error">{error}</p> : null}
+          </>
+        ) : null}
 
-      {step === 1 ? (
-        <div className="method-grid">
-          {methods.map((item) => (
-            <button key={item.id} type="button" className="method-card" onClick={() => chooseMethod(item.id)}>
-              {item.name}
+        {step === 2 && method ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!amount || Number(amount) <= 0) {
+                setError("Enter an amount");
+                return;
+              }
+              setError("");
+              setStep(3);
+            }}
+          >
+            {mode === "deposit" && receiver ? (
+              <p className="pay-to">
+                Pay this number with {method === "kbzpay" ? "KBZPay" : "WavePay"}:
+                <strong> {receiver}</strong>
+                <button
+                  type="button"
+                  className="linkish"
+                  onClick={() => navigator.clipboard.writeText(receiver)}
+                >
+                  Copy
+                </button>
+              </p>
+            ) : null}
+            <label className="field">
+              ပမာဏ
+              <div className="field-box">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value.replace(/\D/g, ""))}
+                  placeholder="0"
+                  required
+                />
+                <span>Ks</span>
+              </div>
+            </label>
+            <div className="quick-row">
+              {quickAmounts.map((value) => (
+                <button key={value} type="button" onClick={() => setAmount(value)}>
+                  {Number(value).toLocaleString("en-US")}
+                </button>
+              ))}
+            </div>
+            {error ? <p className="error">{error}</p> : null}
+            <button className="primary-btn" type="submit">
+              Next
             </button>
-          ))}
-        </div>
-      ) : null}
+            <button type="button" className="ghost-btn" onClick={() => setStep(1)}>
+              Back
+            </button>
+          </form>
+        ) : null}
 
-      {step === 2 && method ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!amount || Number(amount) <= 0) {
-              setError("Enter an amount");
-              return;
-            }
-            setError("");
-            setStep(3);
-          }}
-        >
-          {mode === "deposit" && receiver ? (
-            <p className="pay-to">
-              Pay this number with {method === "kbzpay" ? "KBZPay" : "WavePay"}:
-              <strong> {receiver}</strong>
-              <button
-                type="button"
-                className="linkish"
-                onClick={() => navigator.clipboard.writeText(receiver)}
-              >
-                Copy
-              </button>
-            </p>
-          ) : null}
-          <label>
-            Amount
-            <input
-              type="number"
-              min={1}
-              step={1}
-              inputMode="numeric"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              required
-            />
-          </label>
-          {error ? <p className="error">{error}</p> : null}
-          <button type="submit">Next</button>
-          <button type="button" className="secondary" onClick={() => setStep(1)}>
-            Back
-          </button>
-        </form>
-      ) : null}
+        {step === 3 && method ? (
+          <form onSubmit={onSubmit}>
+            {mode === "deposit" ? (
+              <label className="field">
+                Last 6 digits
+                <div className="field-box">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="\d{6}"
+                    maxLength={6}
+                    value={digits}
+                    onChange={(event) => setDigits(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    required
+                  />
+                </div>
+              </label>
+            ) : (
+              <label className="field">
+                Your {method === "kbzpay" ? "KBZPay" : "WavePay"} number
+                <div className="field-box">
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    placeholder="09..."
+                    required
+                  />
+                </div>
+              </label>
+            )}
+            {error ? <p className="error">{error}</p> : null}
+            <button className="primary-btn" type="submit" disabled={busy}>
+              {busy
+                ? mode === "withdraw"
+                  ? "Sending… this can take up to 90 seconds"
+                  : "Please wait…"
+                : mode === "deposit"
+                  ? "Verify and add"
+                  : "ငွေထုတ်မည်"}
+            </button>
+            <button type="button" className="ghost-btn" onClick={() => setStep(2)} disabled={busy}>
+              Back
+            </button>
+          </form>
+        ) : null}
 
-      {step === 3 && method ? (
-        <form onSubmit={onSubmit}>
-          {mode === "deposit" ? (
-            <label>
-              Last 6 digits
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="\d{6}"
-                maxLength={6}
-                value={digits}
-                onChange={(event) => setDigits(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                required
-              />
-            </label>
-          ) : (
-            <label>
-              Receive phone
-              <input
-                type="tel"
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                placeholder="09..."
-                required
-              />
-            </label>
-          )}
-          {error ? <p className="error">{error}</p> : null}
-          <button type="submit" disabled={busy}>
-            {busy ? "Please wait…" : mode === "deposit" ? "Verify and add" : "Request withdraw"}
-          </button>
-          <button type="button" className="secondary" onClick={() => setStep(2)} disabled={busy}>
-            Back
-          </button>
-        </form>
-      ) : null}
-
-      {step === 4 ? (
-        <div>
-          <p className="success">{done}</p>
-          <button type="button" onClick={onClose}>
-            Done
-          </button>
-        </div>
-      ) : null}
-
-      {step !== 4 ? (
-        <button type="button" className="secondary" onClick={onClose} disabled={busy}>
-          Close
-        </button>
-      ) : null}
+        {step === 4 ? (
+          <div>
+            <p className="success">{done}</p>
+            <button type="button" className="primary-btn" onClick={onClose}>
+              Done
+            </button>
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }
