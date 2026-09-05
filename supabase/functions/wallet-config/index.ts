@@ -4,7 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-payment-key, x-kbz-receiver, x-wave-receiver, x-payment-api-url",
+    "authorization, x-client-info, apikey, content-type, x-payment-key, x-kbz-receiver, x-wave-receiver, x-kbz-name, x-wave-name, x-payment-api-url",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
@@ -45,9 +45,11 @@ Deno.serve(async (req) => {
 
   const kbz = firstEnv(req, "x-kbz-receiver", "kbzreceiver", "KBZRECEIVER", "KBZ_RECEIVER");
   const wave = firstEnv(req, "x-wave-receiver", "wavereceiver", "WAVERECEIVER", "WAVE_RECEIVER");
+  const kbzName = firstEnv(req, "x-kbz-name", "kbzname", "KBZNAME", "KBZ_NAME");
+  const waveName = firstEnv(req, "x-wave-name", "wavename", "WAVENAME", "WAVE_NAME");
 
   return json({
-    kbzpay: { label: "KBZPay", receiver: kbz },
-    wavepay: { label: "WavePay", receiver: wave },
+    kbzpay: { label: "KBZPay", receiver: kbz, name: kbzName },
+    wavepay: { label: "WavePay", receiver: wave, name: waveName },
   });
 });

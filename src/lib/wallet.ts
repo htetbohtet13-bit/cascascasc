@@ -3,8 +3,8 @@ import { supabase } from "./supabase";
 export type PayMethod = "kbzpay" | "wavepay";
 
 export type WalletMethods = {
-  kbzpay: { label: string; receiver: string };
-  wavepay: { label: string; receiver: string };
+  kbzpay: { label: string; receiver: string; name?: string };
+  wavepay: { label: string; receiver: string; name?: string };
 };
 
 async function authHeader() {

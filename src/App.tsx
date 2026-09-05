@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { authenticate, signOut } from "./lib/auth";
 import { issueGameToken, launchGame, loadSlotBets, type GameSession, type SlotBet } from "./lib/game";
 import { supabase } from "./lib/supabase";
+import DepositFlow from "./DepositFlow";
 import Wallet from "./Wallet";
 
 type Mode = "signin" | "signup";
@@ -484,9 +485,20 @@ export default function App() {
             ))}
           </nav>
 
-          {walletOpen ? (
+          {walletOpen && walletMode === "deposit" ? (
+            <DepositFlow
+              onClose={() => {
+                setWalletOpen(false);
+                setNavTab("games");
+              }}
+              onBalance={(next) =>
+                setProfile((current) => (current ? { ...current, balance: next } : current))
+              }
+            />
+          ) : null}
+
+          {walletOpen && walletMode === "withdraw" ? (
             <Wallet
-              initialMode={walletMode}
               defaultPhone={phoneNumber === "—" ? "" : phoneNumber}
               onClose={() => {
                 setWalletOpen(false);

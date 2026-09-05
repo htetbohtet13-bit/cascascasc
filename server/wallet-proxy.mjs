@@ -1,4 +1,4 @@
-import { paymentForwardHeaders } from "./payment-env.mjs";
+import { paymentConfig, paymentForwardHeaders } from "./payment-env.mjs";
 
 export async function handleWalletProxy({
   authHeader,
@@ -27,5 +27,10 @@ export async function handleWalletProxy({
   });
 
   const body = await forwarded.json().catch(() => ({}));
+  if (functionName === "wallet-config" && body?.kbzpay && body?.wavepay) {
+    const names = paymentConfig();
+    body.kbzpay = { ...body.kbzpay, name: names.kbzName || body.kbzpay.name || "" };
+    body.wavepay = { ...body.wavepay, name: names.waveName || body.wavepay.name || "" };
+  }
   return { status: forwarded.status, body };
 }
