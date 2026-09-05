@@ -9,13 +9,14 @@ type Props = {
   onBalance: (balance: number) => void;
 };
 
-const BANKS: { id: PayMethod; label: string; img: string }[] = [
-  { id: "kbzpay", label: "KBZPay", img: "/images/design-mode/kpay.png" },
-  { id: "wavepay", label: "WavePay", img: "/images/design-mode/wavepay.png" },
+const BANKS: { id: PayMethod; label: string; img: string; cls: string }[] = [
+  { id: "kbzpay", label: "KBZPay", img: "/images/design-mode/kpay.png", cls: "kbz" },
+  { id: "wavepay", label: "WavePay", img: "/images/design-mode/wavepay.png", cls: "wave" },
 ];
 
 const QUICK_AMOUNTS = [5000, 10000, 20000, 50000, 100000, 500000];
-const INSTRUCTION_IMG = "https://9blqhfvaufeml8ge.public.blob.vercel-storage.com/instru";
+const RECEIPT_INSTRUCTION = "/images/design-mode/receipt-instructions.jpg";
+const NAME_FALLBACK = "Moe Nan Win";
 const DIRECT_LINES = [
   "ငွေလွှဲစာရင်း ပြင်ဆင်နေသည်…",
   "ငွေပေးချေမှုသို့ ညွှန်းနေသည်…",
@@ -41,14 +42,6 @@ function IconShield() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M12 3l8 4v5c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V7l8-4z" />
       <path d="M9 12l2 2 4-4" />
-    </svg>
-  );
-}
-
-function IconChev() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-      <polyline points="9 18 15 12 9 6" />
     </svg>
   );
 }
@@ -102,8 +95,6 @@ export default function DepositFlow({ onClose, onBalance }: Props) {
   const [redirectCountdown, setRedirectCountdown] = useState(3);
   const [directing, setDirecting] = useState(false);
   const [directPhase, setDirectPhase] = useState(0);
-  const [receiptFocused, setReceiptFocused] = useState(false);
-  const [instructionFailed, setInstructionFailed] = useState(false);
   const [loadingMethods, setLoadingMethods] = useState(true);
   const receiptInputRef = useRef<HTMLInputElement>(null);
   const directingTimer = useRef<number | null>(null);
@@ -111,12 +102,7 @@ export default function DepositFlow({ onClose, onBalance }: Props) {
   const numericAmount = Number(amount || 0);
   const bank = BANKS.find((item) => item.id === method);
   const account = method && config ? config[method].receiver : "";
-  const receiverName = method && config ? config[method].name?.trim() || "" : "";
-  const instructionSrc = instructionFailed
-    ? method === "wavepay"
-      ? "/images/wavepay-instructions.jpg"
-      : "/images/kpay-instructions.jpg"
-    : INSTRUCTION_IMG;
+  const receiverName = (method && config?.[method].name?.trim()) || NAME_FALLBACK;
 
   useEffect(() => {
     let active = true;
@@ -302,21 +288,16 @@ export default function DepositFlow({ onClose, onBalance }: Props) {
                 <div className="deposit-spinner" />
               </div>
             ) : (
-              <div className="deposit-bank-list">
-                {BANKS.map((item, index) => (
+              <div className="deposit-bank-grid">
+                {BANKS.map((item) => (
                   <button
                     key={item.id}
                     type="button"
-                    className="deposit-panel deposit-bank-row"
-                    style={{ animationDelay: `${index * 0.06}s` }}
+                    className={`deposit-bank-card ${item.cls}`}
                     onClick={() => chooseBank(item.id)}
                   >
                     <img src={item.img} alt="" />
-                    <span>
-                      <strong>{item.label}</strong>
-                      <em>ချက်ချင်းငွေဖြည့်နိုင်သည်</em>
-                    </span>
-                    <IconChev />
+                    <span>{item.label}</span>
                   </button>
                 ))}
               </div>
@@ -383,78 +364,58 @@ export default function DepositFlow({ onClose, onBalance }: Props) {
         ) : null}
 
         {step === 3 && method && bank && !directing ? (
-          <section className="deposit-pay">
-            <div className="deposit-pay-bar">
+          <section className="deposit-pay-white">
+            <div className="deposit-pay-white-bar">
               <button type="button" onClick={goBack}>
                 <IconArrow />
                 နောက်သို့
               </button>
-              <div>
-                <IconClock />
-                {formatTime(timeLeft)}
-              </div>
             </div>
-            <div className="deposit-pay-body">
-              <div className="deposit-panel deposit-details">
-                <div className="deposit-details-head">
+            <div className="deposit-white-card">
+              <div className="deposit-white-head">
+                <div>
                   <img src={bank.img} alt="" />
-                  <strong>{bank.label}</strong>
+                  <strong>{bank.label === "KBZPay" ? "KBZ Pay" : "Wave Pay"}</strong>
                 </div>
-                {[
-                  { key: "receiver", label: "နာမည်", value: receiverName || "—", copy: receiverName },
-                  { key: "account", label: "ငွေလွှဲရန် နံပါတ်", value: account, copy: account },
-                  {
-                    key: "amount",
-                    label: "လွှဲရန် ပမာဏ",
-                    value: `${numericAmount.toLocaleString("en-US")} ကျပ်`,
-                    copy: String(numericAmount),
-                  },
-                ].map((row, index, rows) => (
-                  <div key={row.key} className={`deposit-detail-row${index < rows.length - 1 ? " split" : ""}`}>
-                    <div>
-                      <em>{row.label}</em>
-                      <strong>{row.value || "—"}</strong>
-                    </div>
-                    <button
-                      type="button"
-                      aria-label={`${row.label} ကူးယူရန်`}
-                      className={copied === row.key ? "copied" : ""}
-                      onClick={() => {
-                        if (!row.copy) return;
-                        void copyValue(row.copy, row.key);
-                      }}
-                      disabled={!row.copy}
-                    >
-                      {copied === row.key ? <IconCheck /> : <IconCopy />}
-                    </button>
-                  </div>
-                ))}
+                <div className="deposit-white-timer">
+                  <IconClock />
+                  {formatTime(timeLeft)}
+                </div>
               </div>
 
-              <p className="deposit-hint">ငွေလွှဲပြီးပါက လုပ်ငန်းစဉ် နောက်ဆုံးနံပါတ် ၆ လုံးထည့်ပါ 👇</p>
-
-              <button
-                type="button"
-                className={`deposit-otp${receiptDigits.length === 6 ? " done" : ""}${receiptDigits.length === 0 ? " pulse" : ""}`}
-                onClick={() => receiptInputRef.current?.focus()}
-              >
-                <div>
-                  {Array.from({ length: 6 }).map((_, index) => {
-                    const digit = receiptDigits[index] ?? "";
-                    const isActive =
-                      receiptFocused && index === Math.min(receiptDigits.length, 5) && receiptDigits.length < 6;
-                    const isEmptyHint = !digit && index === receiptDigits.length;
-                    return (
-                      <span
-                        key={index}
-                        className={digit ? "filled" : isActive ? "active" : ""}
-                      >
-                        {digit ||
-                          (isEmptyHint ? <i /> : <b>·</b>)}
-                      </span>
-                    );
-                  })}
+              {[
+                { key: "receiver", label: "နာမည်", value: receiverName, copy: receiverName },
+                { key: "account", label: "ငွေလွှဲရန် နံပါတ်", value: account, copy: account },
+                {
+                  key: "amount",
+                  label: "လွှဲရန် ပမာဏ",
+                  value: `${numericAmount.toLocaleString("en-US")}ကျပ်`,
+                  copy: String(numericAmount),
+                },
+              ].map((row) => (
+                <div key={row.key} className="deposit-white-row">
+                  <div>
+                    <em>{row.label}</em>
+                    <strong>{row.value || "—"}</strong>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={`${row.label} ကူးယူရန်`}
+                    className={copied === row.key ? "copied" : ""}
+                    onClick={() => {
+                      if (!row.copy) return;
+                      void copyValue(row.copy, row.key);
+                    }}
+                    disabled={!row.copy}
+                  >
+                    {copied === row.key ? <IconCheck /> : <IconCopy />}
+                  </button>
                 </div>
+              ))}
+
+              <p className="deposit-white-hint">ငွေလွှဲပြီးပါက လုပ်ငန်းစဉ် နောက်ဆုံးနံပါတ်6လုံးထည့်ပါ👇</p>
+
+              <div className={`deposit-white-otp${receiptDigits.length === 6 ? " done" : ""}`}>
                 <input
                   ref={receiptInputRef}
                   value={receiptDigits}
@@ -462,28 +423,23 @@ export default function DepositFlow({ onClose, onBalance }: Props) {
                     setReceiptDigits(event.target.value.replace(/\D/g, "").slice(0, 6));
                     setMessage(null);
                   }}
-                  onFocus={() => setReceiptFocused(true)}
-                  onBlur={() => setReceiptFocused(false)}
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   maxLength={6}
+                  placeholder="000000"
                   aria-label="ပြေစာနောက်ဆုံး 6 လုံး"
-                />
-              </button>
-
-              <div className="deposit-instruction">
-                <img
-                  src={instructionSrc}
-                  alt="နောက်ဆုံး ၆ လုံး ရှာရန်"
-                  onError={() => setInstructionFailed(true)}
                 />
               </div>
 
-              {message ? <p className="deposit-error">{message}</p> : null}
+              <div className="deposit-white-instruction">
+                <img src={RECEIPT_INSTRUCTION} alt="နောက်ဆုံး ၆ လုံး ရှာရန်" />
+              </div>
+
+              {message ? <p className="deposit-white-error">{message}</p> : null}
 
               <button
                 type="button"
-                className="deposit-primary"
+                className="deposit-white-confirm"
                 onClick={() => void confirmDeposit()}
                 disabled={receiptDigits.length !== 6 || timeLeft === 0}
               >

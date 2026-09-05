@@ -1146,9 +1146,46 @@
   box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
-.deposit-bank-list {
+.deposit-flow input {
+  font-size: inherit !important;
+}
+
+.deposit-bank-grid {
   display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.deposit-bank-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 22px 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(145deg, #1b2030, #141824);
+  color: #fff;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.deposit-bank-card img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 16px;
+}
+
+.deposit-bank-card.kbz {
+  box-shadow: 0 8px 24px rgba(29, 122, 232, 0.35);
+}
+
+.deposit-bank-card.wave {
+  box-shadow: 0 8px 24px rgba(255, 194, 20, 0.32);
 }
 
 .deposit-bank-row {
@@ -1775,4 +1812,188 @@
 .deposit-bonus.result-bonus {
   width: 100%;
   margin-top: 16px;
+}
+
+.deposit-pay-white {
+  min-height: 100dvh;
+  padding: 12px 16px 32px;
+  background: #0f1115;
+}
+
+.deposit-pay-white-bar {
+  margin-bottom: 12px;
+}
+
+.deposit-pay-white-bar button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: none;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.deposit-white-card {
+  overflow: hidden;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.35);
+  color: #111;
+  padding: 0 16px 16px;
+}
+
+.deposit-white-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 0 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.deposit-white-head > div:first-child {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.deposit-white-head img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.deposit-white-head strong {
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 24px;
+  font-weight: 800;
+  color: #000;
+}
+
+.deposit-white-timer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #dc2626;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.deposit-white-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.deposit-white-row em {
+  display: block;
+  font-style: normal;
+  font-size: 14px;
+  color: #4b5563;
+}
+
+.deposit-white-row strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #000;
+}
+
+.deposit-white-row button {
+  display: flex;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: #9ca3af;
+  cursor: pointer;
+}
+
+.deposit-white-row button.copied {
+  color: #16a34a;
+}
+
+.deposit-white-hint {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #dc2626;
+}
+
+.deposit-white-otp {
+  margin-top: 8px;
+  border: 2px solid #ef4444;
+  border-radius: 16px;
+  background: #fff;
+  padding: 8px;
+}
+
+.deposit-white-otp.done {
+  border-color: #22c55e;
+}
+
+.deposit-white-otp input {
+  width: 100%;
+  height: 80px;
+  border: 0;
+  background: transparent;
+  outline: none;
+  color: #111;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 48px !important;
+  font-weight: 800;
+  letter-spacing: 0.35em;
+  text-align: center;
+}
+
+.deposit-white-instruction {
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.deposit-white-instruction img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.deposit-white-error {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #dc2626;
+}
+
+.deposit-white-confirm {
+  width: 100%;
+  height: 48px;
+  margin-top: 12px;
+  border: 0;
+  border-radius: 16px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.deposit-white-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
