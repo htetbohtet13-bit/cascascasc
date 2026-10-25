@@ -48,8 +48,8 @@
 }
 
 .brand-logo {
-  height: 40px;
-  max-width: 100px;
+  height: 48px;
+  max-width: 64px;
   object-fit: contain;
   justify-self: start;
 }
@@ -669,8 +669,8 @@
 
 .auth-topbar img {
   display: block;
-  width: 112px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
   object-position: left center;
 }

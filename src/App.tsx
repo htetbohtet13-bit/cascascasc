@@ -249,7 +249,7 @@ export default function App() {
   const authDialog = !session && authOpen ? (
     <div className="auth-overlay" role="presentation">
       <div className="auth-topbar">
-        <img src="/images/exact-casino-logo.png" alt="JL Win777" />
+        <img src="/images/jl777-logo.png" alt="JL Win777" />
         <button
           type="button"
           className="auth-close"
@@ -279,7 +279,7 @@ export default function App() {
 
         <form className="auth-form" onSubmit={onSubmit}>
           <label>
-            ဖုန်းနံပါတ်
+            {signingIn ? "ဖုန်းနံပါတ်" : "သင့်ဖုန်းနံပါတ်"}
             <input
               type="tel"
               name="phone"
@@ -292,7 +292,7 @@ export default function App() {
             />
           </label>
           <label>
-            စကားဝှက်
+            {signingIn ? "စကားဝှက်" : "နှစ်သက်ရာ စကားဝှက်"}
             <input
               type="text"
               name="password"
@@ -335,7 +335,7 @@ export default function App() {
       <div className="telegram-app-content">
         <div className="shell">
           <header className={`app-top-bar${scrolled ? " scrolled" : ""}`}>
-            <img className="brand-logo" src="/images/exact-casino-logo.png" alt="JL Win777" />
+            <img className="brand-logo" src="/images/jl777-logo.png" alt="JL Win777" />
             {session ? (
               <div className="balance-chip">
                 <div className="balance-value">
