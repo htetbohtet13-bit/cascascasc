@@ -80,6 +80,7 @@ export default function App() {
   const [bets, setBets] = useState<SlotBet[]>([]);
   const [gameSession, setGameSession] = useState<GameSession | null>(null);
   const [ready, setReady] = useState(false);
+  const [authOpen, setAuthOpen] = useState(true);
   const [mode, setMode] = useState<Mode>("signin");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -167,6 +168,7 @@ export default function App() {
       await signOut();
       setNavTab("games");
       setWalletOpen(false);
+      setAuthOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign out");
     } finally {
@@ -175,6 +177,11 @@ export default function App() {
   }
 
   async function onPlayBuffalo() {
+    if (!session) {
+      setAuthOpen(true);
+      return;
+    }
+
     setPlaying(true);
     setError("");
     try {
@@ -200,12 +207,20 @@ export default function App() {
   }
 
   function openWallet(nextMode: "deposit" | "withdraw" = "deposit") {
+    if (!session) {
+      setAuthOpen(true);
+      return;
+    }
     setWalletMode(nextMode);
     setWalletOpen(true);
     setNavTab("cashier");
   }
 
   function handleNav(id: NavTab) {
+    if (!session && (id === "cashier" || id === "profile")) {
+      setAuthOpen(true);
+      return;
+    }
     if (id === "cashier") {
       openWallet("deposit");
       return;
@@ -223,84 +238,78 @@ export default function App() {
     );
   }
 
-  if (!session) {
-    const signingIn = mode === "signin";
-    return (
-      <main className="auth-page">
-        <div className="auth-box">
-          <img className="auth-logo" src="/images/design-mode/log.png" alt="JL Win777" />
-          <h1>JL Win777</h1>
-          <p className="auth-lead">{signingIn ? "သင့်အကောင့်ကို ဝင်ပါ" : "အခမဲ့ အကောင့်အသစ် ဖွင့်ပါ"}</p>
+  const signingIn = mode === "signin";
+  const authDialog = !session && authOpen ? (
+    <div className="auth-overlay" role="presentation">
+      <div className="auth-topbar">
+        <img src="/images/exact-casino-logo.png" alt="JL Win777" />
+        <button
+          type="button"
+          className="auth-close"
+          aria-label="ပိတ်မည်"
+          onClick={() => {
+            setAuthOpen(false);
+            setError("");
+          }}
+        >
+          {Ic.close}
+        </button>
+      </div>
+      <section className="auth-box" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+        <h1 id="auth-title">{signingIn ? "အကောင့်ဝင်ပါ" : "အကောင့်အသစ်ဖွင့်ပါ"}</h1>
+        <p className="auth-switch-line">
+          {signingIn ? "အကောင့်မရှိသေးဘူးလား?" : "အကောင့်ရှိပြီးသားလား?"}{" "}
+          <button
+            type="button"
+            onClick={() => {
+              setMode(signingIn ? "signup" : "signin");
+              setError("");
+            }}
+          >
+            {signingIn ? "အကောင့်ဖွင့်ပါ" : "ဝင်မည်"}
+          </button>
+        </p>
 
-          <div className="auth-tabs" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={signingIn}
-              className={signingIn ? "active" : ""}
-              onClick={() => {
-                setMode("signin");
-                setError("");
-              }}
-            >
-              ဝင်မည်
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!signingIn}
-              className={!signingIn ? "active" : ""}
-              onClick={() => {
-                setMode("signup");
-                setError("");
-              }}
-            >
-              အကောင့်ဖွင့်
-            </button>
-          </div>
-
-          <form className="auth-form" onSubmit={onSubmit}>
-            <label>
-              ဖုန်းနံပါတ်
-              <input
-                type="tel"
-                name="phone"
-                autoComplete="tel"
-                inputMode="numeric"
-                placeholder="ဥပမာ - 09 123 456 789"
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                required
-              />
-              <span className="auth-help">သင်သုံးနေသော ဖုန်းနံပါတ်ကို ရိုက်ပါ</span>
-            </label>
-            <label>
-              စကားဝှက်
-              <input
-                type="text"
-                name="password"
-                autoComplete={signingIn ? "current-password" : "new-password"}
-                minLength={6}
-                placeholder={signingIn ? "သင့်စကားဝှက်ကို ရိုက်ပါ" : "အနည်းဆုံး ၆ လုံး ရိုက်ပါ"}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </label>
-            {error ? <p className="error">{error}</p> : null}
-            <button className="gold-btn" type="submit" disabled={busy}>
-              {busy ? "ခဏစောင့်ပါ…" : signingIn ? "အကောင့်ဝင်မည်" : "အကောင့်အသစ် ဖွင့်မည်"}
-            </button>
-          </form>
-        </div>
-      </main>
-    );
-  }
+        <form className="auth-form" onSubmit={onSubmit}>
+          <label>
+            ဖုန်းနံပါတ်
+            <input
+              type="tel"
+              name="phone"
+              autoComplete="tel"
+              inputMode="numeric"
+              placeholder="09xxxxxxxxx"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              required
+            />
+          </label>
+          <label>
+            စကားဝှက်
+            <input
+              type="text"
+              name="password"
+              autoComplete={signingIn ? "current-password" : "new-password"}
+              minLength={6}
+              placeholder={signingIn ? "စကားဝှက် ရိုက်ပါ" : "အနည်းဆုံး ၆ လုံး"}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+          </label>
+          {error ? <p className="error">{error}</p> : null}
+          <button className="gold-btn" type="submit" disabled={busy}>
+            {busy ? "ခဏစောင့်ပါ…" : signingIn ? "ဝင်မည်" : "အကောင့်ဖွင့်မည်"}
+          </button>
+        </form>
+      </section>
+    </div>
+  ) : null;
 
   const phoneNumber =
     profile?.phone ??
-    session.user.phone ??
-    (session.user.user_metadata?.phone as string | undefined) ??
+    session?.user.phone ??
+    (session?.user.user_metadata?.phone as string | undefined) ??
     "—";
   const balance = profile?.balance ?? 0;
   const showBuffalo = gameFilter !== "cards";
@@ -320,20 +329,28 @@ export default function App() {
         <div className="shell">
           <header className={`app-top-bar${scrolled ? " scrolled" : ""}`}>
             <img className="brand-logo" src="/images/exact-casino-logo.png" alt="JL Win777" />
-            <div className="balance-chip">
-              <div className="balance-value">
-                <strong>{balance.toLocaleString("en-US")}</strong>
-                <span>Ks</span>
+            {session ? (
+              <div className="balance-chip">
+                <div className="balance-value">
+                  <strong>{balance.toLocaleString("en-US")}</strong>
+                  <span>Ks</span>
+                </div>
+                <div className="balance-divider" />
+                <button type="button" className="topup-chip" onClick={() => openWallet("deposit")}>
+                  <span>+</span>
+                  ငွေဖြည့်
+                </button>
               </div>
-              <div className="balance-divider" />
-              <button type="button" className="topup-chip" onClick={() => openWallet("deposit")}>
-                <span>+</span>
-                ငွေဖြည့်
+            ) : null}
+            {session ? (
+              <button type="button" className="avatar-btn" onClick={() => handleNav("profile")} aria-label="အကောင့်">
+                🎭
               </button>
-            </div>
-            <button type="button" className="avatar-btn" onClick={() => handleNav("profile")} aria-label="အကောင့်">
-              🎭
-            </button>
+            ) : (
+              <button type="button" className="guest-sign-in" onClick={() => setAuthOpen(true)}>
+                ဝင်မည်
+              </button>
+            )}
           </header>
 
           <div className="body-scroll" ref={scrollRef}>
@@ -519,6 +536,7 @@ export default function App() {
           ) : null}
         </div>
       </div>
+      {authDialog}
     </div>
   );
 }
