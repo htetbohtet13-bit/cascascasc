@@ -83,8 +83,6 @@ export default function App() {
   const [mode, setMode] = useState<Mode>("signin");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -151,16 +149,10 @@ export default function App() {
     event.preventDefault();
     setError("");
 
-    if (mode === "signup" && password !== confirmPassword) {
-      setError("စကားဝှက် နှစ်ခု မတူပါ");
-      return;
-    }
-
     setBusy(true);
     try {
       await authenticate(mode, phone, password);
       setPassword("");
-      setConfirmPassword("");
     } catch (err) {
       setError(friendlyAuthError(err instanceof Error ? err.message : ""));
     } finally {
@@ -285,7 +277,7 @@ export default function App() {
             <label>
               စကားဝှက်
               <input
-                type={showPassword ? "text" : "password"}
+                type="text"
                 name="password"
                 autoComplete={signingIn ? "current-password" : "new-password"}
                 minLength={6}
@@ -294,29 +286,6 @@ export default function App() {
                 onChange={(event) => setPassword(event.target.value)}
                 required
               />
-            </label>
-            {signingIn ? null : (
-              <label>
-                စကားဝှက်ကို ထပ်ရိုက်ပါ
-                <input
-                  type={showPassword ? "text" : "password"}
-                  name="confirmPassword"
-                  autoComplete="new-password"
-                  minLength={6}
-                  placeholder="စကားဝှက် ထပ်ရိုက်ပါ"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  required
-                />
-              </label>
-            )}
-            <label className="auth-show">
-              <input
-                type="checkbox"
-                checked={showPassword}
-                onChange={(event) => setShowPassword(event.target.checked)}
-              />
-              စကားဝှက်ကို ပြပါ
             </label>
             {error ? <p className="error">{error}</p> : null}
             <button className="gold-btn" type="submit" disabled={busy}>
