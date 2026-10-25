@@ -81,7 +81,7 @@ export default function App() {
   const [gameSession, setGameSession] = useState<GameSession | null>(null);
   const [ready, setReady] = useState(false);
   const [authOpen, setAuthOpen] = useState(true);
-  const [mode, setMode] = useState<Mode>("signin");
+  const [mode, setMode] = useState<Mode>("signup");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -168,6 +168,7 @@ export default function App() {
       await signOut();
       setNavTab("games");
       setWalletOpen(false);
+      setMode("signup");
       setAuthOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign out");
@@ -178,7 +179,7 @@ export default function App() {
 
   async function onPlayBuffalo() {
     if (!session) {
-      setAuthOpen(true);
+      openAuth("signup");
       return;
     }
 
@@ -206,9 +207,15 @@ export default function App() {
     }
   }
 
+  function openAuth(nextMode: Mode = "signup") {
+    setMode(nextMode);
+    setError("");
+    setAuthOpen(true);
+  }
+
   function openWallet(nextMode: "deposit" | "withdraw" = "deposit") {
     if (!session) {
-      setAuthOpen(true);
+      openAuth("signup");
       return;
     }
     setWalletMode(nextMode);
@@ -218,7 +225,7 @@ export default function App() {
 
   function handleNav(id: NavTab) {
     if (!session && (id === "cashier" || id === "profile")) {
-      setAuthOpen(true);
+      openAuth("signup");
       return;
     }
     if (id === "cashier") {
@@ -347,8 +354,8 @@ export default function App() {
                 🎭
               </button>
             ) : (
-              <button type="button" className="guest-sign-in" onClick={() => setAuthOpen(true)}>
-                ဝင်မည်
+              <button type="button" className="guest-sign-in" onClick={() => openAuth("signup")}>
+                အကောင့်ဖွင့်
               </button>
             )}
           </header>
