@@ -1,6 +1,6 @@
 :root {
   --bottom-nav-height: 88px;
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * {
@@ -23,14 +23,14 @@ body,
 html,
 body {
   overflow: hidden;
-  background: #090b12;
+  background: #f6f4ee;
 }
 
 body {
   height: 100dvh;
   font-family: "Noto Sans Myanmar", "Myanmar Text", Inter, sans-serif;
   font-size: 16px;
-  color: #fff;
+  color: #2b2923;
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
 }
