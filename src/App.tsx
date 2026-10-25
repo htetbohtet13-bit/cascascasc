@@ -8,7 +8,6 @@ import Wallet from "./Wallet";
 
 type Mode = "signin" | "signup";
 type NavTab = "cashier" | "games" | "bonuses" | "profile";
-type GameFilter = "all" | "popular" | "cards" | "buffalo";
 
 type Profile = {
   phone: string;
@@ -16,12 +15,6 @@ type Profile = {
   game_uid: string;
   created_at: string;
 };
-
-const BANNERS = [
-  "https://9blqhfvaufeml8ge.public.blob.vercel-storage.com/banners/ChatGPT%20Image%20Jul%2029%2C%202026%2C%2008_27_15%20PM.webp",
-  "https://9blqhfvaufeml8ge.public.blob.vercel-storage.com/banners/ChatGPT%20Image%20Jul%2029%2C%202026%2C%2009_08_27%20PM.webp",
-  "/images/JL-banner.jpg",
-];
 
 const Ic = {
   cashier: (
@@ -90,9 +83,6 @@ export default function App() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [walletMode, setWalletMode] = useState<"deposit" | "withdraw">("deposit");
   const [navTab, setNavTab] = useState<NavTab>("games");
-  const [gameFilter, setGameFilter] = useState<GameFilter>("popular");
-  const [bannerIdx, setBannerIdx] = useState(0);
-  const [bannerFailed, setBannerFailed] = useState<Record<number, boolean>>({});
   const [scrolled, setScrolled] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -130,13 +120,6 @@ export default function App() {
       .then(setBets)
       .catch(() => setBets([]));
   }, [session]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setBannerIdx((current) => (current + 1) % BANNERS.length);
-    }, 4200);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -319,17 +302,6 @@ export default function App() {
     (session?.user.user_metadata?.phone as string | undefined) ??
     "—";
   const balance = profile?.balance ?? 0;
-  const showBuffalo = gameFilter !== "cards";
-  const sectionTitle =
-    gameFilter === "all"
-      ? "အားလုံးဂိမ်းများ"
-      : gameFilter === "popular"
-        ? "ရေပန်းစားသော ဂိမ်းများ"
-        : gameFilter === "cards"
-          ? "ကတ်ဂိမ်းများ"
-          : "ကျွဲဂိမ်းများ";
-  const bannerSrc = bannerFailed[bannerIdx] ? "/images/JL-banner.jpg" : BANNERS[bannerIdx];
-
   return (
     <div className="telegram-app-root">
       <div className="telegram-app-content">
@@ -351,7 +323,7 @@ export default function App() {
             ) : null}
             {session ? (
               <button type="button" className="avatar-btn" onClick={() => handleNav("profile")} aria-label="အကောင့်">
-                🎭
+                {Ic.profile}
               </button>
             ) : (
               <button type="button" className="guest-sign-in" onClick={() => openAuth("signup")}>
@@ -430,68 +402,29 @@ export default function App() {
             ) : navTab === "bonuses" ? (
               <div className="placeholder-panel">ဘောနပ်စ် မရှိသေးပါ</div>
             ) : (
-              <>
-                <div className="banner-wrap">
-                  <div className="banner">
-                    <img
-                      src={bannerSrc}
-                      alt=""
-                      onError={() => setBannerFailed((current) => ({ ...current, [bannerIdx]: true }))}
-                    />
-                    <div className="banner-dots">
-                      {BANNERS.map((_, index) => (
-                        <button
-                          key={index}
-                          type="button"
-                          className={index === bannerIdx ? "active" : ""}
-                          onClick={() => setBannerIdx(index)}
-                        />
-                      ))}
-                    </div>
-                  </div>
+              <section className="home-page">
+                <div className="home-intro">
+                  <p>{session ? "ကြိုဆိုပါတယ်" : "ဧည့်သည်အနေနဲ့ ကြည့်ရှုနေသည်"}</p>
+                  <h1>{session ? "ကစားရန် ဂိမ်းရွေးပါ" : "ကစားရန် အကောင့်ဖွင့်ပါ"}</h1>
+                  <span>{session ? "စိတ်ကြိုက်ဂိမ်းကို ရွေးချယ်ပါ" : "ဂိမ်းများကို ကြည့်ပြီး စိတ်ကြိုက်ရွေးချယ်ပါ"}</span>
                 </div>
 
-                <div className="chips">
-                  {(
-                    [
-                      ["all", "အားလုံး"],
-                      ["popular", "ရေပန်းစား"],
-                      ["cards", "ကတ်ဂိမ်း"],
-                      ["buffalo", "ကျွဲဂိမ်း"],
-                    ] as const
-                  ).map(([id, label]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      className={`chip${gameFilter === id ? " active" : ""}`}
-                      onClick={() => setGameFilter(id)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <button type="button" className="home-game-card" onClick={onPlayBuffalo} disabled={playing}>
+                  <img className="home-game-image" src="/images/buffalo.png" alt="" />
+                  <span className="home-game-details">
+                    <small>ဂိမ်း</small>
+                    <strong>ကျွဲဂိမ်း</strong>
+                    <span>{session ? "နှိပ်ပြီး ကစားပါ" : "ကစားရန် အကောင့်ဖွင့်ပါ"}</span>
+                  </span>
+                  <span className="home-game-arrow" aria-hidden="true">›</span>
+                </button>
 
-                <div className="games-section">
-                  <p className="games-title">{sectionTitle}</p>
-                  {showBuffalo ? (
-                    <div className="games-grid">
-                      <button type="button" className="game-tile" onClick={onPlayBuffalo} disabled={playing}>
-                        <div className="game-art">
-                          <img src="/images/buffalo.png" alt="Buffalo" />
-                        </div>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="games-empty">ဂိမ်းမရှိသေးပါ</div>
-                  )}
-                </div>
-
-                <div className="fab-wrap">
-                  <button type="button" className="fab" aria-label="Support">
-                    {Ic.headphones}
+                {!session ? (
+                  <button type="button" className="home-signup-button" onClick={() => openAuth("signup")}>
+                    အခမဲ့ အကောင့်ဖွင့်မည်
                   </button>
-                </div>
-              </>
+                ) : null}
+              </section>
             )}
           </div>
 
