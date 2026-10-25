@@ -62,6 +62,18 @@ const Ic = {
   ),
 };
 
+function friendlyAuthError(message: string) {
+  const text = message.toLowerCase();
+  if (text.includes("already registered")) return "ဤဖုန်းနံပါတ် ရှိပြီးသား ဖြစ်သည်";
+  if (text.includes("valid phone")) return "ဖုန်းနံပါတ် မှန်အောင် ရိုက်ပါ";
+  if (text.includes("at least 6")) return "စကားဝှက် အနည်းဆုံး ၆ လုံး ထည့်ပါ";
+  if (text.includes("enter a password")) return "စကားဝှက် ထည့်ပါ";
+  if (text.includes("invalid") || text.includes("credentials") || text.includes("unauthorized")) {
+    return "ဖုန်းနံပါတ် သို့မဟုတ် စကားဝှက် မှားနေသည်";
+  }
+  return message || "မအောင်မြင်ပါ။ ထပ်ကြိုးစားပါ";
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -72,6 +84,7 @@ export default function App() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -139,7 +152,7 @@ export default function App() {
     setError("");
 
     if (mode === "signup" && password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError("စကားဝှက် နှစ်ခု မတူပါ");
       return;
     }
 
@@ -149,7 +162,7 @@ export default function App() {
       setPassword("");
       setConfirmPassword("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(friendlyAuthError(err instanceof Error ? err.message : ""));
     } finally {
       setBusy(false);
     }
@@ -219,71 +232,97 @@ export default function App() {
   }
 
   if (!session) {
+    const signingIn = mode === "signin";
     return (
       <main className="auth-page">
-        <div className="auth-glow" />
         <div className="auth-box">
           <img className="auth-logo" src="/images/design-mode/log.png" alt="JL Win777" />
-          <h1>{mode === "signin" ? "Welcome back" : "Create your account"}</h1>
-          <p>{mode === "signin" ? "Sign in to continue playing" : "Sign up to start playing"}</p>
+          <h1>JL Win777</h1>
+          <p className="auth-lead">{signingIn ? "သင့်အကောင့်ကို ဝင်ပါ" : "အခမဲ့ အကောင့်အသစ် ဖွင့်ပါ"}</p>
+
+          <div className="auth-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={signingIn}
+              className={signingIn ? "active" : ""}
+              onClick={() => {
+                setMode("signin");
+                setError("");
+              }}
+            >
+              ဝင်မည်
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!signingIn}
+              className={!signingIn ? "active" : ""}
+              onClick={() => {
+                setMode("signup");
+                setError("");
+              }}
+            >
+              အကောင့်ဖွင့်
+            </button>
+          </div>
+
           <form className="auth-form" onSubmit={onSubmit}>
             <label>
-              Phone number
+              ဖုန်းနံပါတ်
               <input
                 type="tel"
                 name="phone"
                 autoComplete="tel"
                 inputMode="numeric"
-                placeholder="09xxxxxxxxx"
+                placeholder="ဥပမာ - 09 123 456 789"
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
                 required
               />
+              <span className="auth-help">သင်သုံးနေသော ဖုန်းနံပါတ်ကို ရိုက်ပါ</span>
             </label>
             <label>
-              Password
+              စကားဝှက်
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 name="password"
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                autoComplete={signingIn ? "current-password" : "new-password"}
                 minLength={6}
-                placeholder={mode === "signup" ? "At least 6 characters" : "••••••••"}
+                placeholder={signingIn ? "သင့်စကားဝှက်ကို ရိုက်ပါ" : "အနည်းဆုံး ၆ လုံး ရိုက်ပါ"}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 required
               />
             </label>
-            {mode === "signup" ? (
+            {signingIn ? null : (
               <label>
-                Confirm password
+                စကားဝှက်ကို ထပ်ရိုက်ပါ
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   name="confirmPassword"
                   autoComplete="new-password"
                   minLength={6}
+                  placeholder="စကားဝှက် ထပ်ရိုက်ပါ"
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   required
                 />
               </label>
-            ) : null}
+            )}
+            <label className="auth-show">
+              <input
+                type="checkbox"
+                checked={showPassword}
+                onChange={(event) => setShowPassword(event.target.checked)}
+              />
+              စကားဝှက်ကို ပြပါ
+            </label>
             {error ? <p className="error">{error}</p> : null}
             <button className="gold-btn" type="submit" disabled={busy}>
-              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Sign up"}
+              {busy ? "ခဏစောင့်ပါ…" : signingIn ? "အကောင့်ဝင်မည်" : "အကောင့်အသစ် ဖွင့်မည်"}
             </button>
           </form>
-          <p className="auth-switch">
-            {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
-            <button
-              type="button"
-              onClick={() => {
-                setMode(mode === "signin" ? "signup" : "signin");
-                setError("");
-              }}
-            >
-              {mode === "signin" ? "Sign up" : "Sign in"}
-            </button>
-          </p>
         </div>
       </main>
     );
