@@ -17,7 +17,7 @@ export function paymentConfig() {
     wavePin: envValue("wavepin", "WAVEPIN", "WAVE_PIN"),
     apiUrl: (
       envValue("PAYMENT_API_URL", "payment_api_url") ||
-      "https://one-cent.mmfastticket.com"
+      "https://api.myanpay.cc"
     ).replace(/\/$/, ""),
   };
 }

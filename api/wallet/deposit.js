@@ -1,5 +1,9 @@
 import { handleWalletProxy } from "../../server/wallet-proxy.mjs";
 
+export const config = {
+  maxDuration: 40,
+};
+
 function jsonBody(req) {
   if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) return req.body;
   if (typeof req.body === "string" && req.body) {

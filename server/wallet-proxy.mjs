@@ -12,6 +12,13 @@ const phoneOf = (value) => {
 };
 const orderId = (prefix) => `${prefix}${randomUUID().replaceAll("-", "")}`.slice(0, 40);
 
+function myanPayExecUrl(baseUrl) {
+  const base = String(baseUrl || "https://api.myanpay.cc").replace(/\/+$/, "");
+  if (base.endsWith("/api/v1/exec")) return base;
+  if (base.endsWith("/api/v1")) return `${base}/exec`;
+  return `${base}/api/v1/exec`;
+}
+
 export async function handleWalletProxy({ req, functionName, method = "POST", payload = {} }) {
   const session = await currentSession(req);
   if (!session?.user) return { status: 401, body: { error: "Not authenticated" } };
@@ -33,21 +40,74 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       if (!/^\d{6}$/.test(transactionId)) return { status: 400, body: { error: "Enter the last 6 digits" } };
       const receiver = serviceType === "kbzpay" ? config.kbzReceiver : config.waveReceiver;
       if (!config.apiKey || !receiver) return { status: 500, body: { error: "Payment is not configured" } };
-      const id = orderId("DEP");
-      const response = await fetch(`${config.apiUrl}/api/verify-transaction`, {
-        method: "POST", signal: AbortSignal.timeout(25000),
-        headers: { "Content-Type": "application/json", "X-API-Key": config.apiKey },
-        body: JSON.stringify({ order_id: id, service_type: serviceType, transaction_id: transactionId, receiver }),
-      });
+      let response;
+      try {
+        response = await fetch(myanPayExecUrl(config.apiUrl), {
+          method: "POST",
+          signal: AbortSignal.timeout(30000),
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${config.apiKey}`,
+          },
+          body: JSON.stringify({
+            cmd: "verify_direct",
+            provider: serviceType === "wavepay" ? "wave" : "kbzpay",
+            account: phoneOf(receiver),
+            digits: transactionId,
+          }),
+        });
+      } catch (error) {
+        const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
+        return {
+          status: timedOut ? 504 : 502,
+          body: {
+            error: timedOut
+              ? "Payment check timed out. Please check the transaction before trying again."
+              : "Could not reach the payment service. Please try again.",
+          },
+        };
+      }
+
       const verified = await response.json().catch(() => ({}));
-      if (verified.message === "Transaction ID already used.") return { status: 400, body: { error: "This transaction was already used" } };
-      if (!verified.success || verified.status !== "verified" || !verified.transaction) return { status: 400, body: { error: verified.message ?? "Transaction not found" } };
-      const paid = amountOf(verified.transaction.amount);
+      if (
+        !response.ok ||
+        verified.success !== true ||
+        String(verified.message ?? "").toLowerCase() !== "verified" ||
+        !verified.data
+      ) {
+        const code = String(verified.code ?? verified.message ?? "").toLowerCase();
+        if (code === "not_found" || code.includes("not found")) {
+          return { status: 400, body: { error: "Payment not found. Check the transaction digits and try again." } };
+        }
+        if (code === "account_not_connected") {
+          return { status: 400, body: { error: "This payment account is not connected. Please contact support." } };
+        }
+        return { status: response.status >= 500 ? 502 : 400, body: { error: verified.message ?? "Payment could not be verified" } };
+      }
+
+      const fullTransactionId = String(verified.data.transaction_id ?? "").trim();
+      const paid = amountOf(verified.data.amount);
+      if (!fullTransactionId || !Number.isSafeInteger(paid) || paid <= 0) {
+        return { status: 502, body: { error: "The payment service returned an incomplete verification result" } };
+      }
       if (paid !== amount) return { status: 400, body: { error: `Paid amount is ${paid}, but you entered ${amount}` } };
-      const result = await applyVerifiedDeposit({
-        userId, orderId: id, serviceType, amount: paid, transactionId,
-        providerTransactionId: String(verified.transaction.id ?? ""), depositToken: verified.deposit_token ?? "",
-      });
+      let result;
+      try {
+        result = await applyVerifiedDeposit({
+          userId,
+          orderId: orderId("DEP"),
+          serviceType,
+          amount: paid,
+          transactionId: fullTransactionId,
+          providerTransactionId: fullTransactionId,
+          depositToken: "",
+        });
+      } catch (error) {
+        if (error?.code === "23505") {
+          return { status: 400, body: { error: "This payment has already been added" } };
+        }
+        throw error;
+      }
       return result.ok ? { status: 200, body: result } : { status: 400, body: { error: result.message } };
     }
 

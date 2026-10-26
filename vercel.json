@@ -23,7 +23,8 @@
       "includeFiles": "server/**"
     },
     "api/wallet/deposit.js": {
-      "includeFiles": "server/**"
+      "includeFiles": "server/**",
+      "maxDuration": 40
     },
     "api/wallet/withdraw.js": {
       "includeFiles": "server/**",
