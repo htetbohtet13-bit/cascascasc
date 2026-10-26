@@ -117,7 +117,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       const sender = phoneOf(serviceType === "kbzpay" ? config.kbzReceiver : config.waveReceiver);
       const requestId = String(payload.request_id ?? "").toLowerCase();
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(requestId)) {
-        return { status: 400, body: { error: "Please refresh and try again" } };
+        return { status: 400, body: { error: "This page is out of date. Refresh it and try again." } };
       }
       if (!config.apiKey || !sender) return { status: 500, body: { error: "Payment is not configured" } };
       const withdrawOrderId = `WD${requestId.replaceAll("-", "")}`;
@@ -141,7 +141,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
             account: sender,
             phone,
             amount,
-            note: `J777 withdrawal ${withdrawOrderId}`,
+            note: "payment",
           }),
         });
       } catch (error) {
