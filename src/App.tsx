@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { authenticate, getSession, signOut } from "./lib/auth";
-import { issueGameToken, launchGame, loadSlotBets, type GameSession, type SlotBet } from "./lib/game";
+import { launchGame, loadSlotBets, type SlotBet } from "./lib/game";
 import DepositFlow from "./DepositFlow";
 import Wallet from "./Wallet";
 
@@ -77,7 +77,6 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [bets, setBets] = useState<SlotBet[]>([]);
-  const [gameSession, setGameSession] = useState<GameSession | null>(null);
   const [ready, setReady] = useState(false);
   const [authOpen, setAuthOpen] = useState(true);
   const [mode, setMode] = useState<Mode>("signup");
@@ -85,6 +84,7 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [copiedUid, setCopiedUid] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [walletOpen, setWalletOpen] = useState(false);
   const [walletMode, setWalletMode] = useState<"deposit" | "withdraw">("deposit");
@@ -105,7 +105,6 @@ export default function App() {
     if (!session) {
       setProfile(null);
       setBets([]);
-      setGameSession(null);
       return;
     }
 
@@ -185,16 +184,14 @@ export default function App() {
     }
   }
 
-  async function onCreateGameSession() {
-    setBusy(true);
-    setError("");
+  async function onCopyGameUid() {
+    const uid = profile?.game_uid;
+    if (!uid) return;
     try {
-      const next = await issueGameToken();
-      setGameSession(next);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create game session");
-    } finally {
-      setBusy(false);
+      await navigator.clipboard.writeText(uid);
+      setCopiedUid(true);
+    } catch {
+      setError("Game ID ကို ကူးယူ၍မရပါ");
     }
   }
 
@@ -352,68 +349,80 @@ export default function App() {
           <div className="body-scroll" ref={scrollRef}>
             {navTab === "profile" ? (
               <section className="profile-page">
-                <div className="profile-kicker">အကောင့်</div>
-                <h1>ကိုယ်ရေး</h1>
-                <div className="profile-hero">
-                  <div className="profile-row">
+                <div className="profile-heading">
+                  <div className="profile-kicker">အကောင့်</div>
+                  <h1>ကျွန်ုပ်၏ အကောင့်</h1>
+                  <p>သင့်အကောင့်နှင့် ငွေလက်ကျန်ကို စီမံပါ</p>
+                </div>
+
+                <section className="profile-account-card" aria-label="Account information">
+                  <div className="profile-account-top">
                     <div className="profile-mark">{Ic.profile}</div>
-                    <div>
-                      <div className="profile-name">{phoneNumber}</div>
-                      <div className="profile-sub">UID {profile?.game_uid ?? "—"}</div>
+                    <div className="profile-account-name">
+                      <strong>{phoneNumber}</strong>
+                      <span>J777 အဖွဲ့ဝင်</span>
                     </div>
                   </div>
-                  <button type="button" className="profile-balance-btn" onClick={() => openWallet("deposit")}>
-                    <span>
-                      <small>လက်ကျန်ငွေ</small>
-                      <strong>
-                        {balance.toLocaleString("en-US")} <span>Ks</span>
-                      </strong>
-                    </span>
-                  </button>
-                </div>
-                <div className="profile-list">
-                  <button type="button" onClick={() => openWallet("deposit")}>
-                    ↓ ငွေသွင်းမှတ်တမ်း
-                  </button>
-                  <button type="button" onClick={() => openWallet("withdraw")}>
-                    ↑ ငွေထုတ်မှတ်တမ်း
-                  </button>
-                  <button type="button" onClick={onCreateGameSession} disabled={busy}>
-                    {gameSession ? "Refresh token" : "Create game session"}
-                  </button>
-                </div>
-                {gameSession ? (
-                  <div className="mono-box">
-                    uid: {gameSession.uid}
-                    <br />
-                    token: {gameSession.token}
+                  <div className="profile-uid-row">
+                    <span>ဂိမ်းအကောင့် ID</span>
+                    <strong>{profile?.game_uid ?? "—"}</strong>
+                    <button type="button" onClick={onCopyGameUid} disabled={!profile?.game_uid}>
+                      {copiedUid ? "ကူးပြီးပါပြီ" : "ကူးယူရန်"}
+                    </button>
                   </div>
-                ) : null}
-                {bets.length > 0 ? (
-                  <table className="bets">
-                    <thead>
-                      <tr>
-                        <th>Bet</th>
-                        <th>Win</th>
-                        <th>Change</th>
-                        <th>Balance</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {bets.map((bet) => (
-                        <tr key={bet.bet_uid}>
-                          <td>{bet.bet}</td>
-                          <td>{bet.win}</td>
-                          <td>{bet.changemoney}</td>
-                          <td>{bet.balance_after}</td>
-                        </tr>
+                </section>
+
+                <section className="profile-balance-card" aria-label="Wallet balance">
+                  <div className="profile-balance-heading">
+                    <span>လက်ကျန်ငွေ</span>
+                    <strong>{balance.toLocaleString("en-US")} <small>Ks</small></strong>
+                  </div>
+                  <div className="profile-wallet-actions">
+                    <button type="button" className="profile-topup-action" onClick={() => openWallet("deposit")}>
+                      <span aria-hidden="true">＋</span> ငွေဖြည့်
+                    </button>
+                    <button type="button" className="profile-withdraw-action" onClick={() => openWallet("withdraw")}>
+                      <span aria-hidden="true">↓</span> ငွေထုတ်
+                    </button>
+                  </div>
+                </section>
+
+                <section className="profile-activity-section">
+                  <div className="profile-section-heading">
+                    <h2>နောက်ဆုံးကစားမှု</h2>
+                    <span>{bets.length ? `${bets.length} ကြိမ်` : ""}</span>
+                  </div>
+                  {bets.length ? (
+                    <div className="profile-activity-list">
+                      {bets.slice(0, 5).map((bet) => (
+                        <div className="profile-activity-row" key={bet.bet_uid}>
+                          <div className="profile-activity-game">
+                            <span className="profile-activity-icon">{Ic.games}</span>
+                            <span>
+                              <strong>{bet.game_id ? `Game ${bet.game_id}` : "ဂိမ်း"}</strong>
+                              <small>{bet.created_at ? new Date(bet.created_at).toLocaleDateString("en-US") : ""}</small>
+                            </span>
+                          </div>
+                          <div className="profile-activity-amounts">
+                            <span>လောင်း {Number(bet.bet).toLocaleString("en-US")} Ks</span>
+                            <strong className={Number(bet.win) > 0 ? "won" : ""}>
+                              {Number(bet.win) > 0 ? "+" : ""}{Number(bet.win).toLocaleString("en-US")} Ks
+                            </strong>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
-                ) : null}
-                {error ? <p className="error" style={{ margin: "12px 16px 0" }}>{error}</p> : null}
+                    </div>
+                  ) : (
+                    <div className="profile-activity-empty">
+                      <p>ကစားမှုမှတ်တမ်း မရှိသေးပါ</p>
+                      <button type="button" onClick={() => handleNav("games")}>ဂိမ်းကြည့်ရန်</button>
+                    </div>
+                  )}
+                </section>
+
+                {error ? <p className="error profile-error">{error}</p> : null}
                 <button type="button" className="sign-out" onClick={onSignOut} disabled={busy}>
-                  {busy ? "Signing out…" : "Sign out"}
+                  {busy ? "ထွက်နေသည်…" : "အကောင့်မှ ထွက်ရန်"}
                 </button>
               </section>
             ) : navTab === "bonuses" ? (
