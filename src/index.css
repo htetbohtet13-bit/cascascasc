@@ -23,14 +23,14 @@ body,
 html,
 body {
   overflow: hidden;
-  background: #eaf8f4;
+  background: #fff8e9;
 }
 
 body {
   height: 100dvh;
   font-family: "Noto Sans Myanmar", "Myanmar Text", Inter, sans-serif;
   font-size: 16px;
-  color: #203331;
+  color: #342719;
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
 }
