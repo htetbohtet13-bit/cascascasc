@@ -2351,6 +2351,13 @@
   color: var(--ui-success);
 }
 
+.wallet-pending {
+  margin: 0 0 16px;
+  color: #8a5a00;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .wallet-sheet {
   background: var(--ui-page);
   color: var(--ui-ink);

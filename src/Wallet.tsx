@@ -26,6 +26,8 @@ export default function Wallet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
+  const [doneState, setDoneState] = useState<"paid" | "pending" | "failed">("paid");
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     loadWalletMethods().catch((err) =>
@@ -46,9 +48,11 @@ export default function Wallet({
     setError("");
     setBusy(true);
     try {
-      const result = await submitWithdraw(method, Number(amount), phone);
-      onBalance(result.balance);
+      const result = await submitWithdraw(method, Number(amount), phone, requestId);
+      if (typeof result.balance === "number") onBalance(result.balance);
       setDone(result.message);
+      setDoneState(result.state);
+      if (result.state === "failed") setRequestId(crypto.randomUUID());
       setStep(4);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not complete the request");
@@ -160,10 +164,26 @@ export default function Wallet({
 
         {step === 4 ? (
           <div>
-            <p className="success">{done}</p>
-            <button type="button" className="primary-btn" onClick={onClose}>
-              Done
-            </button>
+            <p className={doneState === "pending" ? "wallet-pending" : doneState === "failed" ? "error" : "success"}>
+              {done}
+            </p>
+            {doneState === "failed" ? (
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => {
+                  setDone("");
+                  setError("");
+                  setStep(3);
+                }}
+              >
+                Try again
+              </button>
+            ) : (
+              <button type="button" className="primary-btn" onClick={onClose}>
+                Done
+              </button>
+            )}
           </div>
         ) : null}
       </div>

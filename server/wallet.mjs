@@ -56,41 +56,33 @@ export async function applyVerifiedDeposit({
   });
 }
 
-export async function applyWithdraw({ userId, orderId, serviceType, amount, phone, providerTransactionId }) {
+async function currentBalance(client, userId) {
+  const result = await client.query(
+    "select balance from public.profiles where id = $1::uuid",
+    [userId],
+  );
+  return Number(result.rows[0]?.balance ?? 0);
+}
+
+export async function reserveWithdraw({ userId, orderId, serviceType, amount, phone }) {
   return withTransaction(async (client) => {
     const existingOrder = await client.query(
-      "select user_id, kind, status from public.wallet_orders where order_id = $1",
+      `select user_id, kind, service_type, amount, payout_phone, status
+         from public.wallet_orders where order_id = $1 for update`,
       [orderId],
     );
     if (existingOrder.rowCount) {
       const order = existingOrder.rows[0];
-      if (order.user_id === userId && order.kind === "withdraw" && order.status === "paid") {
-        const profile = await client.query(
-          "select balance from public.profiles where id = $1::uuid",
-          [userId],
-        );
-        return { ok: true, balance: Number(profile.rows[0]?.balance ?? 0), message: "Transfer Successful" };
-      }
-      return { ok: false, message: "Order already used" };
-    }
+      if (
+        order.user_id !== userId || order.kind !== "withdraw" ||
+        order.service_type !== serviceType || Number(order.amount) !== amount ||
+        order.payout_phone !== phone
+      ) return { ok: false, message: "This withdrawal request reference was already used" };
 
-    if (providerTransactionId) {
-      const reused = await client.query(
-        `select user_id, order_id from public.wallet_orders
-          where kind = 'withdraw' and status = 'paid' and provider_txn_id = $1`,
-        [providerTransactionId],
-      );
-      if (reused.rowCount) {
-        const row = reused.rows[0];
-        if (row.user_id === userId) {
-          const profile = await client.query(
-            "select balance from public.profiles where id = $1::uuid",
-            [userId],
-          );
-          return { ok: true, balance: Number(profile.rows[0]?.balance ?? 0), message: "Transfer Successful" };
-        }
-        return { ok: false, message: "Transaction already used" };
-      }
+      const balance = await currentBalance(client, userId);
+      if (order.status === "paid") return { ok: true, state: "paid", balance, message: "Transfer Successful" };
+      if (order.status === "pending") return { ok: true, state: "pending", balance, message: "This withdrawal is still being checked", orderId };
+      return { ok: false, state: "failed", balance, message: "This withdrawal was not completed. Please submit it again." };
     }
 
     const profile = await client.query(
@@ -98,6 +90,43 @@ export async function applyWithdraw({ userId, orderId, serviceType, amount, phon
       [userId],
     );
     if (!profile.rowCount) return { ok: false, message: "Profile not found" };
+
+    // Another request with this same id may have reserved while we waited on the profile lock.
+    const retriedOrder = await client.query(
+      `select user_id, kind, service_type, amount, payout_phone, status
+         from public.wallet_orders where order_id = $1 for update`,
+      [orderId],
+    );
+    if (retriedOrder.rowCount) {
+      const order = retriedOrder.rows[0];
+      if (
+        order.user_id !== userId || order.kind !== "withdraw" ||
+        order.service_type !== serviceType || Number(order.amount) !== amount ||
+        order.payout_phone !== phone
+      ) return { ok: false, message: "This withdrawal request reference was already used" };
+      const balance = Number(profile.rows[0].balance);
+      if (order.status === "paid") return { ok: true, state: "paid", balance, message: "Transfer Successful" };
+      if (order.status === "pending") return { ok: true, state: "pending", balance, message: "This withdrawal is still being checked", orderId };
+      return { ok: false, state: "failed", balance, message: "This withdrawal was not completed. Please submit it again." };
+    }
+
+    // Serialize each player's reservations so a second payout cannot race an unresolved one.
+    const pending = await client.query(
+      `select order_id from public.wallet_orders
+        where user_id = $1::uuid and kind = 'withdraw' and status = 'pending'
+        order by created_at desc limit 1`,
+      [userId],
+    );
+    if (pending.rowCount) {
+      return {
+        ok: true,
+        state: "pending",
+        balance: Number(profile.rows[0].balance),
+        message: "A withdrawal is still being checked. Do not submit another one.",
+        orderId: pending.rows[0].order_id,
+      };
+    }
+
     const currentBalance = Number(profile.rows[0].balance);
     if (currentBalance < amount) return { ok: false, message: "Not enough balance" };
 
@@ -108,11 +137,95 @@ export async function applyWithdraw({ userId, orderId, serviceType, amount, phon
     );
     await client.query(
       `insert into public.wallet_orders
-         (user_id, kind, service_type, order_id, amount, payout_phone, provider_txn_id, status, message, completed_at)
-       values ($1::uuid, 'withdraw', $2, $3, $4, $5, nullif($6, ''), 'paid', 'Transfer Successful', now())`,
-      [userId, serviceType, orderId, amount, phone, providerTransactionId],
+         (user_id, kind, service_type, order_id, amount, payout_phone, status, message)
+       values ($1::uuid, 'withdraw', $2, $3, $4, $5, 'pending', 'Transfer reserved')`,
+      [userId, serviceType, orderId, amount, phone],
     );
-    return { ok: true, balance, message: "Transfer Successful" };
+    return { ok: true, state: "reserved", balance, orderId };
+  });
+}
+
+export async function releaseWithdraw({ userId, orderId, message }) {
+  return withTransaction(async (client) => {
+    const order = await client.query(
+      `select user_id, amount, status from public.wallet_orders
+        where order_id = $1 and kind = 'withdraw' for update`,
+      [orderId],
+    );
+    if (!order.rowCount || order.rows[0].user_id !== userId) {
+      return { ok: false, message: "Withdrawal request not found" };
+    }
+    if (order.rows[0].status === "failed") {
+      return { ok: true, state: "failed", balance: await currentBalance(client, userId) };
+    }
+    if (order.rows[0].status === "paid") {
+      return { ok: false, state: "paid", balance: await currentBalance(client, userId) };
+    }
+
+    const restored = await client.query(
+      `update public.profiles set balance = balance + $2
+        where id = $1::uuid returning balance`,
+      [userId, Number(order.rows[0].amount)],
+    );
+    await client.query(
+      `update public.wallet_orders
+          set status = 'failed', message = $2, completed_at = now()
+        where order_id = $1`,
+      [orderId, message],
+    );
+    return { ok: true, state: "failed", balance: Number(restored.rows[0]?.balance ?? 0) };
+  });
+}
+
+export async function recordWithdrawTransfer({ userId, orderId, providerTransactionId }) {
+  return withTransaction(async (client) => {
+    const order = await client.query(
+      `select user_id, status from public.wallet_orders
+        where order_id = $1 and kind = 'withdraw' for update`,
+      [orderId],
+    );
+    if (!order.rowCount || order.rows[0].user_id !== userId) return false;
+    if (order.rows[0].status === "paid") return true;
+    if (order.rows[0].status !== "pending") return false;
+    await client.query(
+      `update public.wallet_orders
+          set provider_txn_id = nullif($2, ''), message = 'Provider confirmed transfer; wallet update pending'
+        where order_id = $1`,
+      [orderId, providerTransactionId],
+    );
+    return true;
+  });
+}
+
+export async function completeWithdraw({ userId, orderId, providerTransactionId }) {
+  return withTransaction(async (client) => {
+    const order = await client.query(
+      `select user_id, status from public.wallet_orders
+        where order_id = $1 and kind = 'withdraw' for update`,
+      [orderId],
+    );
+    if (!order.rowCount || order.rows[0].user_id !== userId) {
+      return { ok: false, message: "Withdrawal request not found" };
+    }
+    if (order.rows[0].status === "paid") {
+      return { ok: true, state: "paid", balance: await currentBalance(client, userId), message: "Transfer Successful" };
+    }
+    if (order.rows[0].status !== "pending") {
+      return { ok: false, state: order.rows[0].status, message: "Withdrawal is no longer pending" };
+    }
+    await client.query(
+      `update public.wallet_orders
+          set status = 'paid', provider_txn_id = nullif($2, ''),
+              message = 'Transfer Successful', completed_at = now()
+        where order_id = $1`,
+      [orderId, providerTransactionId],
+    );
+    return {
+      ok: true,
+      state: "paid",
+      balance: await currentBalance(client, userId),
+      message: "Transfer Successful",
+    };
   });
 }
 

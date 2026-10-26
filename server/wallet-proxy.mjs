@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { currentSession } from "./auth.mjs";
 import { paymentConfig } from "./payment-env.mjs";
-import { applyVerifiedDeposit, applyWithdraw, getProfile, walletMethods } from "./wallet.mjs";
+import { applyVerifiedDeposit, completeWithdraw, recordWithdrawTransfer, releaseWithdraw, reserveWithdraw, walletMethods } from "./wallet.mjs";
 
-const amountOf = (value) => Math.trunc(Number(value));
+const amountOf = (value) => Number(value);
 const phoneOf = (value) => {
   let digits = String(value ?? "").replace(/\D/g, "");
   if (digits.startsWith("95") && digits.length >= 10) digits = `0${digits.slice(2)}`;
@@ -113,37 +113,147 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
 
     if (functionName === "wallet-withdraw") {
       const phone = phoneOf(payload.phone);
-      if (phone.length < 8) return { status: 400, body: { error: "Enter your KBZPay or WavePay number" } };
+      if (!/^09\d{8,10}$/.test(phone)) return { status: 400, body: { error: "Enter a valid KBZPay or WavePay number beginning with 09" } };
       const sender = phoneOf(serviceType === "kbzpay" ? config.kbzReceiver : config.waveReceiver);
-      const pin = serviceType === "kbzpay" ? config.kbzPin : config.wavePin;
-      if (!config.apiKey || !sender || !pin) return { status: 500, body: { error: "Payment is not configured" } };
-      const profile = await getProfile(userId);
-      if (!profile) return { status: 400, body: { error: "Profile not found" } };
-      if (Number(profile.balance) < amount) return { status: 400, body: { error: "Not enough balance" } };
-      let sent;
+      const requestId = String(payload.request_id ?? "").toLowerCase();
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(requestId)) {
+        return { status: 400, body: { error: "Please refresh and try again" } };
+      }
+      if (!config.apiKey || !sender) return { status: 500, body: { error: "Payment is not configured" } };
+      const withdrawOrderId = `WD${requestId.replaceAll("-", "")}`;
+      const reserved = await reserveWithdraw({ userId, orderId: withdrawOrderId, serviceType, amount, phone });
+      if (!reserved.ok) return { status: 400, body: { error: reserved.message } };
+      if (reserved.state === "paid") return { status: 200, body: reserved };
+      if (reserved.state === "pending") return { status: 202, body: reserved };
+
+      let response;
       try {
-        const response = await fetch(`${config.apiUrl}/api/send-money`, {
-          method: "POST", signal: AbortSignal.timeout(95000),
-          headers: { "Content-Type": "application/json", "X-API-Key": config.apiKey },
-          body: JSON.stringify({ serviceType, sender, receiver: phone, amount, pin, description: "J777 withdraw" }),
+        response = await fetch(myanPayExecUrl(config.apiUrl), {
+          method: "POST",
+          signal: AbortSignal.timeout(25000),
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${config.apiKey}`,
+          },
+          body: JSON.stringify({
+            cmd: "transfer",
+            provider: serviceType === "wavepay" ? "wave" : "kbzpay",
+            account: sender,
+            phone,
+            amount,
+            note: `J777 withdrawal ${withdrawOrderId}`,
+          }),
         });
-        sent = await response.json().catch(() => ({}));
       } catch (error) {
-        return { status: error?.name === "TimeoutError" || error?.name === "AbortError" ? 504 : 400,
-          body: { error: error?.name === "TimeoutError" || error?.name === "AbortError"
-            ? "Transfer timed out. Do not try again yet — check KBZPay or WavePay first."
-            : "Could not send money" } };
+        return {
+          status: error?.name === "TimeoutError" || error?.name === "AbortError" ? 504 : 502,
+          body: {
+            ok: true,
+            state: "pending",
+            balance: reserved.balance,
+            orderId: withdrawOrderId,
+            message: "Your withdrawal is being checked. Do not submit it again; contact support if it stays pending.",
+          },
+        };
       }
-      if (!sent?.success) return { status: 400, body: { error: sent?.message ?? "Transfer failed" } };
-      const result = await applyWithdraw({
-        userId, orderId: orderId("WD"), serviceType, amount, phone, providerTransactionId: sent.transactionId ?? "",
-      });
-      if (!result.ok) {
-        return { status: 400, body: { error: sent.transactionId
-          ? `Money was sent (${sent.transactionId}) but balance was not updated. Do not withdraw again — contact support.`
-          : "Transfer sent but balance was not updated" } };
+
+      const sent = await response.json().catch(() => null);
+      const message = String(sent?.message ?? "").toLowerCase();
+      const code = String(sent?.code ?? "").toLowerCase();
+      const providerError = code || message;
+      const definiteFailure = ["bad_phone", "bad_amount", "no_pin", "pin_failed", "account_not_connected"]
+        .some((known) => providerError.includes(known));
+
+      if (sent?.success === true && (message === "otp_required" || code === "otp_required")) {
+        const failureMessage = "This payment account requires an OTP. OTP withdrawals are not enabled, so no money was sent. Your balance has been returned.";
+        const result = await releaseWithdraw({ userId, orderId: withdrawOrderId, message: failureMessage });
+        return {
+          status: 200,
+          body: { ok: false, state: "failed", balance: result.balance, safeToRetry: true, message: failureMessage },
+        };
       }
-      return { status: 200, body: result };
+
+      if (sent?.success === true && message === "transfer_success") {
+        const providerTransactionId = String(sent?.data?.transaction_id ?? "").trim();
+        if (!providerTransactionId) {
+          return {
+            status: 502,
+            body: {
+              ok: true, state: "pending", balance: reserved.balance, orderId: withdrawOrderId,
+              message: "Your withdrawal is being checked. Do not submit it again; contact support if it stays pending.",
+            },
+          };
+        }
+        try {
+          const recorded = await recordWithdrawTransfer({ userId, orderId: withdrawOrderId, providerTransactionId });
+          if (!recorded) {
+            return {
+              status: 502,
+              body: {
+                ok: true, state: "pending", balance: reserved.balance, orderId: withdrawOrderId,
+                message: `The transfer is being checked (${providerTransactionId}). Do not submit it again; contact support.`,
+              },
+            };
+          }
+        } catch {
+          return {
+            status: 502,
+            body: {
+              ok: true, state: "pending", balance: reserved.balance, orderId: withdrawOrderId,
+              message: `The transfer is being checked (${providerTransactionId}). Do not submit it again; contact support.`,
+            },
+          };
+        }
+        let result;
+        try {
+          result = await completeWithdraw({ userId, orderId: withdrawOrderId, providerTransactionId });
+        } catch {
+          return {
+            status: 502,
+            body: {
+              ok: true, state: "pending", balance: reserved.balance, orderId: withdrawOrderId,
+              message: "The transfer is being checked. Do not submit it again; contact support.",
+            },
+          };
+        }
+        if (!result.ok) {
+          return {
+            status: 502,
+            body: {
+              ok: true, state: "pending", balance: reserved.balance, orderId: withdrawOrderId,
+              message: "The transfer is being checked. Do not submit it again; contact support.",
+            },
+          };
+        }
+        return { status: 200, body: result };
+      }
+
+      if (sent?.success === false && definiteFailure) {
+        const failureMessage = String(sent.message ?? sent.code ?? "Transfer was rejected");
+        const result = await releaseWithdraw({ userId, orderId: withdrawOrderId, message: failureMessage });
+        return {
+          status: 200,
+          body: {
+            ok: false,
+            state: "failed",
+            balance: result.balance,
+            safeToRetry: true,
+            message: failureMessage,
+          },
+        };
+      }
+
+      // Unknown replies are treated as ambiguous: keep the reservation to prevent a duplicate payout.
+      return {
+        status: 202,
+        body: {
+          ok: true,
+          state: "pending",
+          balance: reserved.balance,
+          orderId: withdrawOrderId,
+          message: "Your withdrawal is being checked. Do not submit it again; contact support if it stays pending.",
+        },
+      };
     }
     return { status: 404, body: { error: "Not found" } };
   } catch (error) {
