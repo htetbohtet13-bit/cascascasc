@@ -2743,3 +2743,216 @@
     background: var(--ui-page);
   }
 }
+
+/* Shared warm gradients for navigation, wallet, profile, and form screens. */
+:root {
+  --ui-gold-gradient: linear-gradient(135deg, #f7d36a 0%, #e9b936 52%, #d69216 100%);
+  --ui-gold-gradient-hover: linear-gradient(135deg, #f9da7d 0%, #efc34d 52%, #df9e22 100%);
+  --ui-cocoa-gradient: linear-gradient(135deg, #624a30 0%, #493623 55%, #35281d 100%);
+  --ui-cocoa-gradient-hover: linear-gradient(135deg, #73583a 0%, #58422c 55%, #423225 100%);
+}
+
+.topup-chip,
+.primary-btn,
+.deposit-primary,
+.deposit-white-confirm,
+.gold-btn,
+.guest-sign-in {
+  border-color: rgba(255, 255, 255, 0.48);
+  background: var(--ui-gold-gradient);
+  color: var(--ui-gold-ink);
+  box-shadow: 0 3px 9px rgba(176, 117, 10, 0.18);
+}
+
+.topup-chip:hover,
+.primary-btn:hover:not(:disabled),
+.deposit-primary:hover:not(:disabled),
+.deposit-white-confirm:hover:not(:disabled),
+.gold-btn:hover:not(:disabled),
+.guest-sign-in:hover {
+  background: var(--ui-gold-gradient-hover);
+}
+
+.withdraw-chip {
+  border-color: #6f5636;
+  background: var(--ui-cocoa-gradient);
+  color: #fff8e9;
+  box-shadow: 0 3px 9px rgba(52, 39, 25, 0.16);
+}
+
+.withdraw-chip:hover {
+  background: var(--ui-cocoa-gradient-hover);
+}
+
+.bottom-navigation {
+  background: var(--ui-cocoa-gradient);
+  border-top-color: rgba(231, 185, 65, 0.42);
+  box-shadow: 0 -5px 18px rgba(52, 39, 25, 0.22);
+}
+
+.bottom-navigation .nav-item {
+  color: rgba(255, 248, 233, 0.68);
+}
+
+.bottom-navigation .nav-item .nav-icon,
+.bottom-navigation .nav-item[data-id] .nav-icon {
+  border-color: rgba(255, 248, 233, 0.12);
+  background: linear-gradient(145deg, rgba(255, 248, 233, 0.12), rgba(255, 248, 233, 0.035)) !important;
+  color: rgba(255, 248, 233, 0.76);
+  box-shadow: none;
+}
+
+.bottom-navigation .nav-item.active {
+  color: #f7d36a;
+}
+
+.bottom-navigation .nav-item.active .nav-icon {
+  border-color: rgba(255, 235, 167, 0.8);
+  background: var(--ui-gold-gradient) !important;
+  color: var(--ui-gold-ink);
+  box-shadow: 0 3px 9px rgba(214, 150, 22, 0.28) !important;
+}
+
+.profile-hero {
+  border-color: rgba(214, 150, 22, 0.42);
+  background: var(--ui-cocoa-gradient);
+  box-shadow: 0 8px 22px rgba(52, 39, 25, 0.16);
+}
+
+.profile-mark {
+  border: 1px solid rgba(255, 235, 167, 0.72);
+  background: var(--ui-gold-gradient);
+  color: var(--ui-gold-ink);
+}
+
+.profile-name {
+  color: #fff8e9;
+}
+
+.profile-sub {
+  color: rgba(255, 248, 233, 0.72);
+}
+
+.profile-balance-btn {
+  border-color: rgba(255, 235, 167, 0.45);
+  background: linear-gradient(135deg, #fff8e9 0%, #f2dfb1 100%);
+  color: var(--ui-ink);
+}
+
+.profile-balance-btn small {
+  color: var(--ui-muted);
+}
+
+.profile-balance-btn strong {
+  color: var(--ui-ink);
+}
+
+.profile-list,
+.mono-box,
+.placeholder-panel {
+  border-color: var(--ui-line);
+  background: linear-gradient(145deg, var(--ui-surface) 0%, #f7edda 100%);
+  color: var(--ui-ink);
+  box-shadow: 0 3px 10px rgba(75, 51, 13, 0.06);
+}
+
+.profile-list button,
+.profile-list .row {
+  border-bottom-color: var(--ui-line);
+  color: var(--ui-ink);
+}
+
+.auth-box {
+  background: linear-gradient(145deg, var(--ui-surface) 0%, #f7edda 100%);
+}
+
+.auth-close {
+  background: var(--ui-gold-gradient);
+  color: var(--ui-gold-ink);
+}
+
+.wallet-sheet,
+.deposit-flow,
+.deposit-directing,
+.deposit-pay {
+  background: linear-gradient(180deg, #fffaf0 0%, #f6ecd9 100%);
+}
+
+.wallet-tabs button.active {
+  background: var(--ui-gold-gradient);
+  color: var(--ui-gold-ink);
+  box-shadow: 0 2px 7px rgba(176, 117, 10, 0.18);
+}
+
+.bank-card,
+.deposit-panel,
+.deposit-bank-card,
+.avail-card {
+  border-color: var(--ui-line);
+  background: linear-gradient(145deg, var(--ui-surface) 0%, #f7edda 100%);
+  color: var(--ui-ink);
+  box-shadow: 0 3px 10px rgba(75, 51, 13, 0.06);
+}
+
+.avail-card strong {
+  color: var(--ui-ink);
+}
+
+.bank-card.selected,
+.deposit-bank-card:focus-visible {
+  border-color: var(--ui-gold);
+  background: linear-gradient(145deg, #fff5d7 0%, #f1dcaa 100%);
+}
+
+.field-box,
+.deposit-amount-box {
+  border-color: #e4d4b4;
+  background: linear-gradient(145deg, #fffdf8 0%, #faf1df 100%);
+}
+
+.quick-row button,
+.deposit-quick button {
+  border-color: var(--ui-line);
+  background: linear-gradient(145deg, var(--ui-surface) 0%, #faf2e3 100%);
+  color: var(--ui-muted);
+}
+
+.quick-row button:hover,
+.deposit-quick button.active {
+  border-color: #d9aa3e;
+  background: linear-gradient(145deg, #fff5d7 0%, #f1dcaa 100%);
+  color: var(--ui-gold-ink);
+}
+
+.deposit-details-head,
+.deposit-secure,
+.deposit-bonus,
+.deposit-spinner-wrap,
+.deposit-result-icon {
+  border-color: rgba(214, 150, 22, 0.28);
+  background: linear-gradient(135deg, #fff5d7 0%, #f1dcaa 100%);
+}
+
+.deposit-progress div {
+  background: var(--ui-gold-gradient);
+}
+
+.deposit-spinner {
+  border-top-color: #d69216;
+  border-right-color: #f1dcaa;
+  background: transparent;
+}
+
+.deposit-detail-row button,
+.deposit-icon-btn,
+.icon-btn {
+  border-color: var(--ui-line);
+  background: linear-gradient(145deg, var(--ui-surface) 0%, #f7edda 100%);
+  color: var(--ui-ink);
+}
+
+.ghost-btn {
+  border-color: var(--ui-line);
+  background: linear-gradient(145deg, var(--ui-surface) 0%, #f7edda 100%);
+  color: var(--ui-ink);
+}
