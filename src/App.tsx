@@ -337,17 +337,16 @@ export default function App() {
                   <span>+</span>
                   ငွေဖြည့်
                 </button>
+                <button type="button" className="withdraw-chip" onClick={() => openWallet("withdraw")}>
+                  ငွေထုတ်
+                </button>
               </div>
             ) : null}
-            {session ? (
-              <button type="button" className="avatar-btn" onClick={() => handleNav("profile")} aria-label="အကောင့်">
-                🎭
-              </button>
-            ) : (
+            {!session ? (
               <button type="button" className="guest-sign-in" onClick={() => openAuth("signup")}>
                 အကောင့်ဖွင့်
               </button>
-            )}
+            ) : null}
           </header>
 
           <div className="body-scroll" ref={scrollRef}>

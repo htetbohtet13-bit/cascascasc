@@ -138,6 +138,24 @@
   transform: translateY(-1px);
 }
 
+.withdraw-chip {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .avatar-btn {
   width: 36px;
   height: 36px;
@@ -2087,6 +2105,9 @@
 .balance-chip {
   background: var(--ui-surface-soft);
   border-color: var(--ui-line);
+  gap: 6px;
+  padding: 4px 5px 4px 9px;
+  border-radius: 10px;
   box-shadow: none;
 }
 
@@ -2118,6 +2139,35 @@
   background: var(--ui-gold);
   color: var(--ui-gold-ink);
   box-shadow: none;
+}
+
+.topup-chip {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.withdraw-chip {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--ui-line);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-ink);
+  font-size: 11px;
+  box-shadow: none;
+}
+
+.withdraw-chip:hover {
+  background: var(--ui-surface-soft);
+}
+
+.topup-chip:focus-visible,
+.withdraw-chip:focus-visible {
+  outline: 2px solid var(--ui-gold);
+  outline-offset: 2px;
 }
 
 .topup-chip:hover,
