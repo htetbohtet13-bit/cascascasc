@@ -16,7 +16,6 @@ const BANKS: { id: PayMethod; label: string; img: string; cls: string }[] = [
 
 const QUICK_AMOUNTS = [5000, 10000, 20000, 50000, 100000, 500000];
 const RECEIPT_INSTRUCTION = "/images/design-mode/receipt-instructions.jpg";
-const NAME_FALLBACK = "Moe Nan Win";
 const DIRECT_LINES = [
   "ငွေလွှဲစာရင်း ပြင်ဆင်နေသည်…",
   "ငွေပေးချေမှုသို့ ညွှန်းနေသည်…",
@@ -101,8 +100,9 @@ export default function DepositFlow({ onClose, onBalance }: Props) {
 
   const numericAmount = Number(amount || 0);
   const bank = BANKS.find((item) => item.id === method);
-  const account = method && config ? config[method].receiver : "";
-  const receiverName = (method && config?.[method].name?.trim()) || NAME_FALLBACK;
+  const paymentAccount = method && config ? config[method] : null;
+  const account = paymentAccount?.receiver?.trim() ?? "";
+  const receiverName = paymentAccount?.name?.trim() ?? "";
 
   useEffect(() => {
     let active = true;
@@ -169,6 +169,11 @@ export default function DepositFlow({ onClose, onBalance }: Props) {
   }
 
   function chooseBank(next: PayMethod) {
+    const accountDetails = config?.[next];
+    if (!accountDetails?.receiver?.trim() || !accountDetails?.name?.trim()) {
+      setMessage("ငွေလက်ခံအကောင့် အချက်အလက် မရှိသေးပါ။ ကျေးဇူးပြု၍ အကူအညီကို ဆက်သွယ်ပါ။");
+      return;
+    }
     setMethod(next);
     setMessage(null);
     setStep(2);
