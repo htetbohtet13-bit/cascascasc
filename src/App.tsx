@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { authenticate, signOut } from "./lib/auth";
+import { authenticate, getSession, signOut } from "./lib/auth";
 import { issueGameToken, launchGame, loadSlotBets, type GameSession, type SlotBet } from "./lib/game";
-import { supabase } from "./lib/supabase";
 import DepositFlow from "./DepositFlow";
 import Wallet from "./Wallet";
 
@@ -16,6 +14,7 @@ type Profile = {
   game_uid: string;
   created_at: string;
 };
+type Session = { user: { id: string; name?: string; username?: string } };
 
 const BANNERS = [
   "https://9blqhfvaufeml8ge.public.blob.vercel-storage.com/banners/ChatGPT%20Image%20Jul%2029%2C%202026%2C%2008_27_15%20PM.webp",
@@ -97,16 +96,9 @@ export default function App() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setReady(true);
-    });
-
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-    });
-
-    return () => data.subscription.unsubscribe();
+    getSession().then((data) => setSession(data?.user ? data as Session : null))
+      .catch(() => setSession(null))
+      .finally(() => setReady(true));
   }, []);
 
   useEffect(() => {
@@ -117,14 +109,9 @@ export default function App() {
       return;
     }
 
-    supabase
-      .from("profiles")
-      .select("phone, balance, game_uid, created_at")
-      .eq("id", session.user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        setProfile(data);
-      });
+    fetch("/api/me", { credentials: "include" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => setProfile(data?.profile ?? null));
 
     loadSlotBets(session.user.id)
       .then(setBets)
@@ -153,6 +140,8 @@ export default function App() {
     setBusy(true);
     try {
       await authenticate(mode, phone, password);
+      const nextSession = await getSession();
+      setSession(nextSession?.user ? nextSession as Session : null);
       setPassword("");
     } catch (err) {
       setError(friendlyAuthError(err instanceof Error ? err.message : ""));
@@ -166,6 +155,8 @@ export default function App() {
     setError("");
     try {
       await signOut();
+      setSession(null);
+      setProfile(null);
       setNavTab("games");
       setWalletOpen(false);
       setMode("signup");
@@ -315,8 +306,7 @@ export default function App() {
 
   const phoneNumber =
     profile?.phone ??
-    session?.user.phone ??
-    (session?.user.user_metadata?.phone as string | undefined) ??
+    session?.user.name ??
     "—";
   const balance = profile?.balance ?? 0;
   const showBuffalo = gameFilter !== "cards";

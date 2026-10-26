@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { issueGameToken } from "./game.mjs";
 
 const PROVIDER_LOGIN_URL = "https://api-ms.african-buffalo.net/api/game-login";
 const DEFAULT_LOBBY_URL = "https://j777ml.com";
@@ -64,9 +65,7 @@ function extractGameUrl(payload) {
 }
 
 export async function handleGameLogin({
-  authHeader,
-  supabaseUrl,
-  anonKey,
+  userId,
   gameId = 23,
   roomId = 1,
   lobbyUrl = process.env.LOBBY_URL ?? DEFAULT_LOBBY_URL,
@@ -74,12 +73,8 @@ export async function handleGameLogin({
   gatewayUrl = process.env.GATEWAY_URL ?? DEFAULT_GATEWAY_URL,
   gatewaySecret = process.env.GATEWAY_SECRET ?? "",
 }) {
-  if (!authHeader) {
+  if (!userId) {
     return { status: 401, body: { error: "Not authenticated" } };
-  }
-
-  if (!supabaseUrl || !anonKey) {
-    return { status: 500, body: { error: "Server is not configured" } };
   }
 
   const secret = gatewaySecret || process.env.GATEWAY_SECRET || "";
@@ -89,14 +84,7 @@ export async function handleGameLogin({
     return { status: 500, body: { error: "Game gateway is not configured" } };
   }
 
-  const tokenRes = await fetch(`${supabaseUrl}/functions/v1/issue-game-token`, {
-    method: "POST",
-    headers: {
-      Authorization: authHeader,
-      apikey: anonKey,
-    },
-  });
-  const tokenData = await tokenRes.json().catch(() => ({}));
+  const tokenData = await issueGameToken(userId);
 
   if (!tokenData?.uid || !tokenData?.token) {
     return {

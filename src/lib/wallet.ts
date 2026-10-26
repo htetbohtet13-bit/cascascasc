@@ -1,5 +1,3 @@
-import { supabase } from "./supabase";
-
 export type PayMethod = "kbzpay" | "wavepay";
 
 export type WalletMethods = {
@@ -7,20 +5,12 @@ export type WalletMethods = {
   wavepay: { label: string; receiver: string; name?: string };
 };
 
-async function authHeader() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) throw new Error("Not authenticated");
-  return `Bearer ${session.access_token}`;
-}
-
 async function walletRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      Authorization: await authHeader(),
       ...(init?.headers ?? {}),
     },
   });
@@ -48,13 +38,35 @@ export function submitDeposit(serviceType: PayMethod, amount: number, transactio
   });
 }
 
-export function submitWithdraw(serviceType: PayMethod, amount: number, phone: string) {
-  return walletRequest<{ ok: boolean; balance: number; message: string }>("/api/wallet/withdraw", {
+export async function submitWithdraw(serviceType: PayMethod, amount: number, phone: string) {
+  const response = await fetch("/api/wallet/withdraw", {
     method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({
       service_type: serviceType,
       amount,
       phone,
     }),
   });
+  const payload = (await response.json().catch(() => ({}))) as {
+    ok?: boolean;
+    balance?: number;
+    message?: string;
+    error?: string;
+  };
+  if (response.status === 504 || response.status === 408) {
+    throw new Error(
+      payload.error || "Transfer timed out. Do not try again yet — check KBZPay or WavePay first.",
+    );
+  }
+  if (!response.ok || payload.error) {
+    throw new Error(payload.error || "Request failed");
+  }
+  if (!payload.ok || typeof payload.balance !== "number") {
+    throw new Error(payload.message || "Request failed");
+  }
+  return payload as { ok: boolean; balance: number; message: string };
 }

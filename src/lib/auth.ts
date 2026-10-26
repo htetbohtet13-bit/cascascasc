@@ -1,53 +1,25 @@
-import { supabase } from "./supabase";
-
 type AuthAction = "signup" | "signin";
 
-type AuthResponse = {
-  session?: {
-    access_token: string;
-    refresh_token: string;
-  };
-  error?: string;
-};
+async function authRequest<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`/api/auth/${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    credentials: "include",
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "Request failed");
+  return payload as T;
+}
 
 export async function authenticate(action: AuthAction, phone: string, password: string) {
-  const { data, error } = await supabase.functions.invoke<AuthResponse>("phone-auth", {
-    body: { action, phone, password },
-  });
+  await authRequest(action === "signup" ? "sign-up" : "sign-in", { phone, password });
+}
 
-  if (data?.error) {
-    throw new Error(data.error);
-  }
-
-  if (error) {
-    let message = error.message;
-    const response = (error as { context?: Response }).context;
-    if (response) {
-      try {
-        const body = (await response.clone().json()) as AuthResponse;
-        if (body.error) message = body.error;
-      } catch {
-        // keep the original message
-      }
-    }
-    throw new Error(message);
-  }
-
-  if (!data?.session?.access_token || !data.session.refresh_token) {
-    throw new Error("Could not start a session");
-  }
-
-  const { error: sessionError } = await supabase.auth.setSession({
-    access_token: data.session.access_token,
-    refresh_token: data.session.refresh_token,
-  });
-
-  if (sessionError) {
-    throw new Error(sessionError.message);
-  }
+export function getSession() {
+  return authRequest<{ user?: { id: string; name?: string; username?: string } } | null>("get-session");
 }
 
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw new Error(error.message);
+  await authRequest("sign-out", {});
 }

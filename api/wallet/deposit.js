@@ -27,12 +27,11 @@ export default async function handler(req, res) {
   }
 
   const result = await handleWalletProxy({
-    authHeader: req.headers.authorization,
-    supabaseUrl: process.env.VITE_SUPABASE_URL,
-    anonKey: process.env.VITE_SUPABASE_ANON_KEY,
+    req,
     functionName: "wallet-deposit",
     payload: jsonBody(req),
   });
 
   res.status(result.status).json(result.body);
 }
+
