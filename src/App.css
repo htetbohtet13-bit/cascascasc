@@ -2144,24 +2144,34 @@
 .topup-chip {
   height: 34px;
   padding: 0 10px;
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 9px;
+  background: linear-gradient(135deg, #f7d36a 0%, #e9b936 52%, #d69216 100%);
   font-size: 11px;
   font-weight: 700;
+  box-shadow: 0 2px 6px rgba(176, 117, 10, 0.2);
 }
 
 .withdraw-chip {
   min-height: 34px;
   padding: 0 10px;
-  border: 1px solid var(--ui-line);
-  border-radius: 8px;
-  background: var(--ui-surface);
-  color: var(--ui-ink);
+  border: 1px solid #6f5636;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #624a30 0%, #493623 55%, #35281d 100%);
+  color: #fff8e9;
   font-size: 11px;
-  box-shadow: none;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(52, 39, 25, 0.18);
+}
+
+.topup-chip:hover {
+  background: linear-gradient(135deg, #f9da7d 0%, #efc34d 52%, #df9e22 100%);
+  box-shadow: 0 3px 9px rgba(176, 117, 10, 0.25);
 }
 
 .withdraw-chip:hover {
-  background: var(--ui-surface-soft);
+  background: linear-gradient(135deg, #73583a 0%, #58422c 55%, #423225 100%);
+  box-shadow: 0 3px 9px rgba(52, 39, 25, 0.22);
 }
 
 .topup-chip:focus-visible,
@@ -2170,7 +2180,6 @@
   outline-offset: 2px;
 }
 
-.topup-chip:hover,
 .guest-sign-in:hover,
 .gold-btn:hover:not(:disabled) {
   background: var(--ui-gold-hover);
