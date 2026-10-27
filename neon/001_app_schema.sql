@@ -49,43 +49,59 @@ create table if not exists public.slot_bets (
 create index if not exists slot_bets_user_created_idx
   on public.slot_bets (user_id, created_at desc);
 
-create table if not exists public.wallet_orders (
+create table if not exists public.deposits (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null
     references public.profiles (id) on delete cascade,
-  kind text not null check (kind in ('deposit', 'withdraw')),
   service_type text not null check (service_type in ('kbzpay', 'wavepay')),
   order_id text not null unique,
   amount bigint not null check (amount > 0),
   transaction_id text,
   provider_txn_id text,
   deposit_token text,
-  payout_phone text,
-  status text not null check (status in ('pending', 'verified', 'failed', 'paid')),
+  status text not null check (status in ('pending', 'verified', 'failed')),
   message text,
   created_at timestamptz not null default now(),
   completed_at timestamptz
 );
 
-create index if not exists wallet_orders_user_created_idx
-  on public.wallet_orders (user_id, created_at desc);
+create index if not exists deposits_user_created_idx
+  on public.deposits (user_id, created_at desc);
 
-create unique index if not exists wallet_orders_verified_tx_uidx
-  on public.wallet_orders (transaction_id)
-  where kind = 'deposit'
-    and status = 'verified'
-    and transaction_id is not null;
+create unique index if not exists deposits_transaction_id_uidx
+  on public.deposits (transaction_id)
+  where transaction_id is not null;
 
-create unique index if not exists wallet_orders_paid_withdraw_txn_uidx
-  on public.wallet_orders (provider_txn_id)
-  where kind = 'withdraw'
-    and status = 'paid'
-    and provider_txn_id is not null;
+create table if not exists public.withdrawals (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null
+    references public.profiles (id) on delete cascade,
+  service_type text not null check (service_type in ('kbzpay', 'wavepay')),
+  order_id text not null unique,
+  amount bigint not null check (amount > 0),
+  provider_txn_id text,
+  payout_phone text not null,
+  status text not null check (status in ('pending', 'failed', 'paid')),
+  message text,
+  created_at timestamptz not null default now(),
+  completed_at timestamptz
+);
+
+create index if not exists withdrawals_user_created_idx
+  on public.withdrawals (user_id, created_at desc);
+
+create index if not exists withdrawals_user_pending_idx
+  on public.withdrawals (user_id, created_at desc)
+  where status = 'pending';
+
+create unique index if not exists withdrawals_provider_txn_id_uidx
+  on public.withdrawals (provider_txn_id)
+  where provider_txn_id is not null;
 
 commit;
 
 -- Quick verification after running:
 -- select table_name from information_schema.tables
 -- where table_schema = 'public'
---   and table_name in ('profiles', 'game_tokens', 'slot_bets', 'wallet_orders')
+--   and table_name in ('profiles', 'game_tokens', 'slot_bets', 'deposits', 'withdrawals')
 -- order by table_name;
