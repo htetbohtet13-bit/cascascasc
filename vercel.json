@@ -29,6 +29,9 @@
     "api/wallet/withdraw.js": {
       "includeFiles": "server/**",
       "maxDuration": 120
+    },
+    "api/admin/index.js": {
+      "includeFiles": "server/**"
     }
   },
   "rewrites": [

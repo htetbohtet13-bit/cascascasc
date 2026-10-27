@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { authenticate, getSession, signOut } from "./lib/auth";
 import { launchGame, loadSlotBets, type SlotBet } from "./lib/game";
 import WalletCenter from "./WalletCenter";
+import AdminDashboard from "./AdminDashboard";
 
 type Mode = "signin" | "signup";
 type NavTab = "cashier" | "games" | "bonuses" | "profile";
@@ -315,6 +316,10 @@ export default function App() {
           ? "ကတ်ဂိမ်းများ"
           : "ကျွဲဂိမ်းများ";
   const bannerSrc = bannerFailed[bannerIdx] ? "/images/JL-banner.jpg" : BANNERS[bannerIdx];
+
+  if (window.location.pathname.replace(/\/+$/, "") === "/admin") {
+    return <AdminDashboard />;
+  }
 
   return (
     <div className="telegram-app-root">
