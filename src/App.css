@@ -2957,28 +2957,50 @@
   color: var(--ui-ink);
 }
 
-/* Clean, consistent bottom navigation icons. */
+/* Compact, colorful bottom navigation inspired by the supplied reference. */
 .bottom-navigation {
-  gap: 4px;
-  padding: 8px 10px max(10px, env(safe-area-inset-bottom));
+  gap: 2px;
+  padding: 7px 10px max(9px, env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, #171923 0%, #0d0e14 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -8px 24px rgba(31, 23, 12, 0.2);
 }
 
 .bottom-navigation .nav-item {
-  min-height: 58px;
-  gap: 3px;
-  padding: 2px 3px;
+  min-height: 62px;
+  gap: 2px;
+  padding: 1px 3px;
   font-family: inherit;
+  color: rgba(255, 248, 233, 0.68);
+  transition: color 160ms ease, transform 160ms ease;
 }
 
 .bottom-navigation .nav-item .nav-icon,
 .bottom-navigation .nav-item[data-id] .nav-icon {
   width: 42px;
-  height: 30px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  background: transparent !important;
-  color: rgba(255, 248, 233, 0.72);
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 12px;
+  color: #fff;
   transform: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 3px 7px rgba(0, 0, 0, 0.25);
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+
+.bottom-navigation .nav-item[data-id="cashier"] .nav-icon {
+  background: linear-gradient(155deg, #5797e8 0%, #1d4c91 100%) !important;
+}
+
+.bottom-navigation .nav-item[data-id="games"] .nav-icon {
+  background: linear-gradient(155deg, #b274f2 0%, #612ca9 100%) !important;
+}
+
+.bottom-navigation .nav-item[data-id="bonuses"] .nav-icon {
+  background: linear-gradient(155deg, #e58c58 0%, #984525 100%) !important;
+}
+
+.bottom-navigation .nav-item[data-id="profile"] .nav-icon {
+  background: linear-gradient(155deg, #47b9ab 0%, #12675f 100%) !important;
 }
 
 .bottom-navigation .nav-icon svg {
@@ -2993,12 +3015,34 @@
   stroke-width: 1.8;
 }
 
-.bottom-navigation .nav-item.active .nav-icon,
-.bottom-navigation .nav-item.active[data-id] .nav-icon {
-  border-color: rgba(255, 235, 167, 0.8);
-  background: var(--ui-gold-gradient) !important;
-  color: var(--ui-gold-ink);
-  transform: translateY(-1px);
+.bottom-navigation .nav-item.active {
+  color: #fff4cf;
+}
+
+.bottom-navigation .nav-item.active .nav-icon {
+  transform: translateY(-2px);
+  filter: brightness(1.13);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 5px 12px rgba(0, 0, 0, 0.32);
+}
+
+.bottom-navigation .nav-item[data-id="cashier"].active .nav-icon {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 5px 13px rgba(47, 117, 220, 0.38);
+}
+
+.bottom-navigation .nav-item[data-id="games"].active .nav-icon {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 5px 13px rgba(148, 75, 222, 0.4);
+}
+
+.bottom-navigation .nav-item[data-id="bonuses"].active .nav-icon {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 5px 13px rgba(219, 111, 57, 0.38);
+}
+
+.bottom-navigation .nav-item[data-id="profile"].active .nav-icon {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 5px 13px rgba(41, 169, 153, 0.38);
+}
+
+.bottom-navigation .nav-item:active .nav-icon {
+  transform: scale(0.94);
 }
 
 .bottom-navigation .nav-item:focus-visible {
