@@ -5,7 +5,8 @@
   "trailingSlash": false,
   "functions": {
     "api/game-login.js": {
-      "includeFiles": "server/**"
+      "includeFiles": "server/**",
+      "maxDuration": 30
     },
     "api/slot-balance.js": {
       "includeFiles": "server/**"

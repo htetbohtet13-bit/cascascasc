@@ -7,7 +7,6 @@ import { getLaunchableGame } from "./games.mjs";
 const PROVIDER_LOGIN_URL = "https://api-ms.african-buffalo.net/api/game-login";
 const DEFAULT_LOBBY_URL = "https://j777ml.com";
 const DEFAULT_DOMAIN = "jlwin777.com";
-const DEFAULT_GATEWAY_URL = "http://69.169.109.91:3001/";
 
 export function gameLoginFailure(error) {
   const detail = String(error?.message ?? "");
@@ -17,7 +16,10 @@ export function gameLoginFailure(error) {
       body: { error: "Game list is not set up yet. Run neon/003_game_catalog.sql in Neon SQL Editor." },
     };
   }
-  if (error?.name === "TypeError" || error?.code === "ECONNREFUSED" || error?.code === "ETIMEDOUT") {
+  if (
+    error?.name === "TypeError" || error?.name === "TimeoutError" ||
+    error?.code === "ECONNREFUSED" || error?.code === "ETIMEDOUT"
+  ) {
     return { status: 502, body: { error: "Could not reach the game service. Please try again." } };
   }
   return { status: 500, body: { error: "Could not start the game. Please try again." } };
@@ -58,8 +60,6 @@ function loadLocalEnv() {
       for (const [key, value] of Object.entries(parsed)) {
         if (!process.env[key]) process.env[key] = value;
       }
-      if (parsed.GATEWAY_SECRET) process.env.GATEWAY_SECRET = parsed.GATEWAY_SECRET;
-      if (parsed.GATEWAY_URL) process.env.GATEWAY_URL = parsed.GATEWAY_URL;
       return;
     } catch {
       // try the next path
@@ -85,8 +85,6 @@ export async function handleGameLogin({
   roomId = 1,
   lobbyUrl = process.env.LOBBY_URL ?? DEFAULT_LOBBY_URL,
   domain = process.env.GAME_PROVIDER_DOMAIN ?? DEFAULT_DOMAIN,
-  gatewayUrl = process.env.GATEWAY_URL ?? DEFAULT_GATEWAY_URL,
-  gatewaySecret = process.env.GATEWAY_SECRET ?? "",
 }) {
   if (!userId) {
     return { status: 401, body: { error: "Not authenticated" } };
@@ -105,13 +103,6 @@ export async function handleGameLogin({
   gameId = selectedGame.game_id;
   roomId = selectedGame.room_id;
 
-  const secret = gatewaySecret || process.env.GATEWAY_SECRET || "";
-  const proxyUrl = gatewayUrl || process.env.GATEWAY_URL || DEFAULT_GATEWAY_URL;
-
-  if (!secret) {
-    return { status: 500, body: { error: "Game gateway is not configured" } };
-  }
-
   const tokenData = await issueGameToken(userId);
 
   if (!tokenData?.uid || !tokenData?.token) {
@@ -121,23 +112,18 @@ export async function handleGameLogin({
     };
   }
 
-  const providerRes = await fetch(proxyUrl, {
+  const providerRes = await fetch(PROVIDER_LOGIN_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Gateway-Secret": secret,
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      targetUrl: PROVIDER_LOGIN_URL,
-      body: {
-        uid: tokenData.uid,
-        token: tokenData.token,
-        gameId: Number(gameId) || 23,
-        roomId: Number(roomId || 1),
-        lobbyUrl,
-        domain,
-      },
+      uid: tokenData.uid,
+      token: tokenData.token,
+      gameId: Number(gameId) || 23,
+      roomId: Number(roomId || 1),
+      lobbyUrl,
+      domain,
     }),
+    signal: AbortSignal.timeout(20_000),
   });
 
   const providerBody = await providerRes.json().catch(() => ({}));
