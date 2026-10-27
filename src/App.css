@@ -3388,6 +3388,7 @@
 .admin-refresh { display: flex; align-items: center; gap: 7px; padding: 9px 13px; border: 1px solid #e6d9c3; border-radius: 10px; background: #fffdf8; color: #594329; font-size: 11px; font-weight: 750; cursor: pointer; }
 .admin-refresh span { color: #a9760f; font-size: 17px; line-height: 12px; }
 .admin-refresh:disabled { opacity: 0.6; cursor: wait; }
+.admin-logout { padding: 9px 12px; border: 1px solid #e6d9c3; border-radius: 10px; background: transparent; color: #766957; font-size: 10px; font-weight: 750; cursor: pointer; }
 .admin-page-content { min-height: 0; flex: 1; overflow: auto; padding: 22px 28px 32px; }
 
 .admin-welcome {
@@ -3476,6 +3477,13 @@
 .admin-gate-card .admin-brand-mark { margin: 0 auto 16px; }
 .admin-gate-card h1 { margin: 0; font-size: 20px; }
 .admin-gate-card p { color: #766957; font-size: 12px; line-height: 1.65; }
+.admin-login-form { display: grid; gap: 9px; margin-top: 17px; text-align: left; }
+.admin-login-form label { color: #5b482f; font-size: 10px; font-weight: 800; }
+.admin-login-form input { width: 100%; height: 43px; padding: 0 12px; border: 1px solid #e1d2b4; border-radius: 10px; outline: none; background: #fffdf8; color: #342719; font-size: 14px !important; }
+.admin-login-form input:focus { border-color: #d59612; box-shadow: 0 0 0 3px rgba(213, 150, 18, 0.12); }
+.admin-login-form > span { color: #a24e3b; font-size: 10px; }
+.admin-login-form .admin-gate-button { width: 100%; border: 0; cursor: pointer; }
+.admin-login-form .admin-gate-button:disabled { opacity: 0.6; cursor: wait; }
 .admin-gate-button { display: inline-flex; justify-content: center; margin-top: 8px; padding: 11px 16px; border-radius: 10px; background: var(--ui-gold-gradient); color: var(--ui-gold-ink); font-size: 11px; font-weight: 800; text-decoration: none; }
 .admin-setup-note code { padding: 2px 5px; border-radius: 4px; background: #f3eadb; color: #5e410b; }
 
@@ -3500,6 +3508,7 @@
   .admin-workspace { min-height: 0; }
   .admin-topbar { min-height: 67px; padding: 10px 14px; }
   .admin-topbar h1 { font-size: 18px; }
+  .admin-refresh, .admin-logout { padding: 8px; font-size: 9px; }
   .admin-page-content { padding: 14px 12px 24px; }
   .admin-welcome { min-height: 94px; padding: 15px; }
   .admin-welcome h2 { font-size: 16px; }

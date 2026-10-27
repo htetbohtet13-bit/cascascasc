@@ -40,7 +40,9 @@ const server = http.createServer(async (req, rawRes) => {
     if (path === "/api/me") return meHandler(req, res);
     if (path === "/api/profile/bets") return betsHandler(req, res);
     if (path === "/api/admin") {
+      res.setHeader("Cache-Control", "private, no-store");
       const result = await handleAdminApi(req);
+      for (const [name, value] of Object.entries(result.headers ?? {})) res.setHeader(name, value);
       return res.status(result.status).json(result.body);
     }
     if (path === "/api/game/session") {

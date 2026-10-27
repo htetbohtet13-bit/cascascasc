@@ -1,27 +1,64 @@
-import { currentSession } from "./auth.mjs";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { getPool } from "./neon.mjs";
-import { normalizePhone } from "./phone.mjs";
 
 const PAGE_SIZE = 50;
 const MAX_PAGE = 1_000_000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ADMIN_SESSION_COOKIE = "casino_admin_session";
+const ADMIN_SESSION_SECONDS = 12 * 60 * 60;
 
-function adminPhones() {
-  return new Set(
-    String(process.env.ADMIN_PHONES ?? "")
-      .split(",")
-      .map((phone) => normalizePhone(phone))
-      .filter(Boolean),
-  );
+function adminSecret() {
+  return String(process.env.admin_secret ?? process.env.ADMIN_SECRET ?? "");
 }
 
-async function authorize(req) {
-  const allowedPhones = adminPhones();
-  if (!allowedPhones.size) return { status: 503, body: { error: "Admin access is not configured" } };
-  const session = await currentSession(req);
-  if (!session?.user) return { status: 401, body: { error: "Sign in with your admin account to continue" } };
-  if (!allowedPhones.has(session.user.name)) return { status: 403, body: { error: "This account is not approved for admin access" } };
-  return { session };
+function cookieValue(req, name) {
+  const cookies = String(req.headers?.cookie ?? "").split(";");
+  const pair = cookies.map((part) => part.trim()).find((part) => part.startsWith(`${name}=`));
+  try {
+    return pair ? decodeURIComponent(pair.slice(name.length + 1)) : "";
+  } catch {
+    return "";
+  }
+}
+
+function tokenSignature(payload, secret) {
+  return createHmac("sha256", secret).update(payload).digest("hex");
+}
+
+function createAdminSession(secret) {
+  const payload = `${Math.floor(Date.now() / 1000)}.${randomBytes(18).toString("hex")}`;
+  const token = `${payload}.${tokenSignature(payload, secret)}`;
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/api/admin; HttpOnly; SameSite=Strict; Max-Age=${ADMIN_SESSION_SECONDS}${secure}`;
+}
+
+function validAdminSession(req, secret) {
+  const parts = cookieValue(req, ADMIN_SESSION_COOKIE).split(".");
+  if (parts.length !== 3 || !/^\d+$/.test(parts[0]) || !/^[0-9a-f]{36}$/.test(parts[1]) || !/^[0-9a-f]{64}$/.test(parts[2])) return false;
+  const issuedAt = Number(parts[0]);
+  const now = Math.floor(Date.now() / 1000);
+  if (!Number.isSafeInteger(issuedAt) || issuedAt > now + 60 || now - issuedAt > ADMIN_SESSION_SECONDS) return false;
+  const payload = `${parts[0]}.${parts[1]}`;
+  const expected = Buffer.from(tokenSignature(payload, secret), "hex");
+  const actual = Buffer.from(parts[2], "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function passwordsMatch(attempt, secret) {
+  const expected = createHash("sha256").update(secret).digest();
+  const actual = createHash("sha256").update(attempt).digest();
+  return timingSafeEqual(actual, expected);
+}
+
+function sameOrigin(req) {
+  const origin = req.headers?.origin;
+  const host = req.headers?.host;
+  if (!origin || !host) return true;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
 }
 
 function pageParams(url) {
@@ -145,11 +182,33 @@ async function userDetails(pool, userId) {
 }
 
 export async function handleAdminApi(req) {
-  const authorization = await authorize(req);
-  if (!authorization.session) return authorization;
-  if (req.method !== "GET") return { status: 405, body: { error: "Method not allowed" } };
-
   const url = new URL(req.url ?? "/api/admin", "http://localhost");
+  const secret = adminSecret();
+  if (Buffer.byteLength(secret, "utf8") < 16) {
+    return { status: 503, body: { error: secret ? "Admin password must be at least 16 characters" : "Admin password is not configured" } };
+  }
+
+  if (req.method === "POST") {
+    if (!sameOrigin(req)) return { status: 403, body: { error: "Request origin is not allowed" } };
+    const action = req.body?.action;
+    if (action === "login") {
+      const attempt = typeof req.body?.password === "string" ? req.body.password.slice(0, 4096) : "";
+      if (!passwordsMatch(attempt, secret)) return { status: 401, body: { error: "Password is incorrect" } };
+      return { status: 200, headers: { "Set-Cookie": createAdminSession(secret) }, body: { ok: true } };
+    }
+    if (action === "logout") {
+      const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+      return {
+        status: 200,
+        headers: { "Set-Cookie": `${ADMIN_SESSION_COOKIE}=; Path=/api/admin; HttpOnly; SameSite=Strict; Max-Age=0${secure}` },
+        body: { ok: true },
+      };
+    }
+    return { status: 400, body: { error: "Unknown admin action" } };
+  }
+  if (req.method !== "GET") return { status: 405, body: { error: "Method not allowed" } };
+  if (!validAdminSession(req, secret)) return { status: 401, body: { error: "Enter the admin password to continue" } };
+
   const view = url.searchParams.get("view") || "overview";
   const pool = getPool();
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 type Section = "overview" | "users" | "bets" | "deposits" | "withdrawals";
 type UserRow = { id: string; phone: string; balance: number | string; game_uid: string; created_at: string };
@@ -57,6 +57,9 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [authCode, setAuthCode] = useState(0);
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -108,21 +111,70 @@ export default function AdminDashboard() {
     setSearch("");
   }
 
+  async function login(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoginError("");
+    setLoginBusy(true);
+    try {
+      const response = await fetch("/api/admin", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "login", password: loginPassword }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Could not sign in");
+      setLoginPassword("");
+      setAuthCode(0);
+      setError("");
+      setRefreshKey((value) => value + 1);
+    } catch (reason) {
+      setLoginError(reason instanceof Error ? reason.message : "Could not sign in");
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
+  async function logout() {
+    await fetch("/api/admin", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "logout" }),
+    }).catch(() => {});
+    setData({});
+    setLoginPassword("");
+    setAuthCode(401);
+  }
+
   const total = data.total ?? 0;
   const pageSize = data.pageSize ?? 50;
   const canGoBack = page > 1;
   const canGoNext = page * pageSize < total;
   const detail = selectedUserId ? data as UserDetail : null;
 
-  if (authCode === 401 || authCode === 403 || authCode === 503) {
+  if (authCode === 401 || authCode === 503) {
     return (
       <main className="admin-gate">
         <div className="admin-gate-card">
           <div className="admin-brand-mark">777</div>
-          <h1>{authCode === 401 ? "Admin sign-in required" : authCode === 403 ? "Access not allowed" : "Admin access is not configured"}</h1>
-          <p>{error}</p>
-          {authCode === 401 ? <a className="admin-gate-button" href="/">Sign in, then return to /admin</a> : null}
-          {authCode === 503 ? <p className="admin-setup-note">Add your account phone to the server-only <code>ADMIN_PHONES</code> environment variable, then redeploy.</p> : null}
+          <h1>{authCode === 401 ? "Admin sign-in" : "Admin password is not set"}</h1>
+          {authCode === 401 ? (
+            <>
+              <p>Enter the admin password to continue.</p>
+              <form className="admin-login-form" onSubmit={(event) => void login(event)}>
+                <label htmlFor="admin-secret">Admin password</label>
+                <input id="admin-secret" type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" autoFocus required />
+                {loginError ? <span role="alert">{loginError}</span> : null}
+                <button className="admin-gate-button" type="submit" disabled={loginBusy}>{loginBusy ? "Checking…" : "Log in"}</button>
+              </form>
+            </>
+          ) : (
+            <>
+              <p>{error}</p>
+              <p className="admin-setup-note">Set a long password in the server-only <code>admin_secret</code> environment variable in Vercel, then redeploy.</p>
+            </>
+          )}
         </div>
       </main>
     );
@@ -155,6 +207,7 @@ export default function AdminDashboard() {
           <button className="admin-refresh" type="button" onClick={() => setRefreshKey((value) => value + 1)} disabled={loading}>
             <span aria-hidden="true">↻</span> Refresh
           </button>
+          <button className="admin-logout" type="button" onClick={() => void logout()}>Lock</button>
         </header>
 
         {error ? <div className="admin-error" role="alert">{error}</div> : null}
