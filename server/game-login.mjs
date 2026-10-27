@@ -85,6 +85,8 @@ export async function handleGameLogin({
   roomId = 1,
   lobbyUrl = process.env.LOBBY_URL ?? DEFAULT_LOBBY_URL,
   domain = process.env.GAME_PROVIDER_DOMAIN ?? DEFAULT_DOMAIN,
+  gatewayUrl = process.env.GATEWAY_URL ?? "",
+  gatewaySecret = process.env.GATEWAY_SECRET ?? "",
 }) {
   if (!userId) {
     return { status: 401, body: { error: "Not authenticated" } };
@@ -103,6 +105,12 @@ export async function handleGameLogin({
   gameId = selectedGame.game_id;
   roomId = selectedGame.room_id;
 
+  const proxyUrl = gatewayUrl || process.env.GATEWAY_URL || "";
+  const secret = gatewaySecret || process.env.GATEWAY_SECRET || "";
+  if (!proxyUrl || !secret) {
+    return { status: 500, body: { error: "Game gateway is not configured" } };
+  }
+
   const tokenData = await issueGameToken(userId);
 
   if (!tokenData?.uid || !tokenData?.token) {
@@ -112,16 +120,22 @@ export async function handleGameLogin({
     };
   }
 
-  const providerRes = await fetch(PROVIDER_LOGIN_URL, {
+  const providerRes = await fetch(proxyUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Gateway-Secret": secret,
+    },
     body: JSON.stringify({
-      uid: tokenData.uid,
-      token: tokenData.token,
-      gameId: Number(gameId) || 23,
-      roomId: Number(roomId || 1),
-      lobbyUrl,
-      domain,
+      targetUrl: PROVIDER_LOGIN_URL,
+      body: {
+        uid: tokenData.uid,
+        token: tokenData.token,
+        gameId: Number(gameId) || 23,
+        roomId: Number(roomId || 1),
+        lobbyUrl,
+        domain,
+      },
     }),
     signal: AbortSignal.timeout(20_000),
   });

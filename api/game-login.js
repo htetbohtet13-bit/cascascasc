@@ -48,6 +48,8 @@ export default async function handler(req, res) {
       roomId: Number(payload.roomId ?? 1),
       lobbyUrl: lobbyUrl(),
       domain: process.env.GAME_PROVIDER_DOMAIN ?? "jlwin777.com",
+      gatewayUrl: process.env.GATEWAY_URL,
+      gatewaySecret: process.env.GATEWAY_SECRET,
     });
     return res.status(result.status).json(result.body);
   } catch (error) {
