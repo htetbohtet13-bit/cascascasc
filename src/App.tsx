@@ -25,16 +25,14 @@ const BANNERS = [
 const Ic = {
   cashier: (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 6.5h14.5A2.5 2.5 0 0 1 21 9v9a2 2 0 0 1-2 2H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h13" />
-      <path d="M2.5 9H21M16 14h2.5" />
-      <circle cx="16" cy="14" r=".6" fill="currentColor" />
+      <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+      <path d="M5 9h14" />
     </svg>
   ),
   games: (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="4" y="3" width="16" height="18" rx="3" />
-      <path d="M4 8h16M8 12h.01M12 12h.01M16 12h.01" strokeWidth="2.8" />
-      <path d="M8 16h8" />
+      <path d="M8 7h8a4.5 4.5 0 0 1 4.3 3.2l1.1 3.8a2.9 2.9 0 0 1-5 2.6L14.8 15H9.2l-1.6 1.6a2.9 2.9 0 0 1-5-2.6l1.1-3.8A4.5 4.5 0 0 1 8 7Z" />
+      <path d="M7 10.5v4M5 12.5h4M16.5 11.5h.01M18.5 13.5h.01" />
     </svg>
   ),
   gift: (
@@ -45,9 +43,8 @@ const Ic = {
   ),
   profile: (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="8" r="3.5" />
-      <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
-      <path d="m17.5 15.5 1.2 1.2 2.3-2.5" />
+      <circle cx="12" cy="8" r="3.3" />
+      <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
     </svg>
   ),
   close: (
