@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { issueGameToken } from "./game.mjs";
+import { getLaunchableGame } from "./games.mjs";
 
 const PROVIDER_LOGIN_URL = "https://api-ms.african-buffalo.net/api/game-login";
 const DEFAULT_LOBBY_URL = "https://j777ml.com";
@@ -76,6 +77,16 @@ export async function handleGameLogin({
   if (!userId) {
     return { status: 401, body: { error: "Not authenticated" } };
   }
+
+  const selectedGameId = Number(gameId);
+  const selectedRoomId = Number(roomId);
+  if (!Number.isSafeInteger(selectedGameId) || selectedGameId < 1 || !Number.isSafeInteger(selectedRoomId) || selectedRoomId < 1) {
+    return { status: 400, body: { error: "Invalid game selection" } };
+  }
+  const selectedGame = await getLaunchableGame(selectedGameId, selectedRoomId);
+  if (!selectedGame) return { status: 404, body: { error: "This game is not available" } };
+  gameId = selectedGame.game_id;
+  roomId = selectedGame.room_id;
 
   const secret = gatewaySecret || process.env.GATEWAY_SECRET || "";
   const proxyUrl = gatewayUrl || process.env.GATEWAY_URL || DEFAULT_GATEWAY_URL;

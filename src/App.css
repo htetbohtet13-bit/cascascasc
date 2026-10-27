@@ -3487,6 +3487,80 @@
 .admin-gate-button { display: inline-flex; justify-content: center; margin-top: 8px; padding: 11px 16px; border-radius: 10px; background: var(--ui-gold-gradient); color: var(--ui-gold-ink); font-size: 11px; font-weight: 800; text-decoration: none; }
 .admin-setup-note code { padding: 2px 5px; border-radius: 4px; background: #f3eadb; color: #5e410b; }
 
+.admin-game-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px; }
+.admin-game-heading > div > span { color: #9b7f56; font-size: 9px; font-weight: 850; letter-spacing: 1.3px; }
+.admin-game-heading h2 { margin: 4px 0; font-size: 19px; }
+.admin-game-heading p { margin: 0; color: #766957; font-size: 10px; }
+.admin-add-game { min-height: 38px; padding: 0 13px; border: 1px solid #d0a846; border-radius: 10px; background: var(--ui-gold-gradient); color: #4d3508; font-size: 11px; font-weight: 850; cursor: pointer; }
+.admin-add-game:disabled { opacity: .6; cursor: wait; }
+.admin-game-form { display: grid; gap: 12px; margin-bottom: 14px; padding: 16px; border: 1px solid #e4d6bd; border-radius: 15px; background: #fffdf8; }
+.admin-game-form-heading { display: flex; align-items: center; justify-content: space-between; }
+.admin-game-form-heading strong { font-size: 14px; }
+.admin-game-form-heading button { border: 0; background: transparent; color: #8c6413; font-size: 10px; font-weight: 700; cursor: pointer; }
+.admin-game-form label { display: grid; min-width: 0; gap: 5px; color: #74634c; font-size: 9px; font-weight: 800; }
+.admin-game-form input:not([type="checkbox"]):not([type="color"]), .admin-game-form select { width: 100%; min-width: 0; height: 37px; padding: 0 9px; border: 1px solid #e6ddce; border-radius: 8px; outline: none; background: #fffefa; color: #342719; font-size: 11px !important; }
+.admin-game-form input[type="color"] { width: 100%; height: 37px; padding: 3px; border: 1px solid #e6ddce; border-radius: 8px; background: #fffefa; }
+.admin-game-form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.admin-game-checks { display: flex; flex-wrap: wrap; gap: 16px; }
+.admin-game-checks label { display: flex; align-items: center; gap: 6px; }
+.admin-game-checks input { accent-color: #b78318; }
+.admin-game-error { margin: 0; color: #a24e3b; font-size: 10px; }
+.admin-games-table-wrap { overflow: auto; border: 1px solid #ede5d9; border-radius: 12px; background: #fffdf8; }
+.admin-game-cell { display: flex; min-width: 160px; align-items: center; gap: 8px; }
+.admin-game-cell img, .admin-game-cell > span { display: grid; width: 34px; height: 42px; flex: 0 0 auto; place-items: center; border-radius: 7px; object-fit: cover; color: #fff5d7; font-weight: 900; }
+.admin-game-cell strong { max-width: 150px; overflow: hidden; color: #4b3a27; text-overflow: ellipsis; }
+.admin-game-actions { display: flex; gap: 8px; }
+.admin-game-actions button { border: 0; background: transparent; color: #8c6413; font-size: 9px; font-weight: 800; cursor: pointer; }
+.admin-game-actions button.delete { color: #a24e3b; }
+
+/* Game catalog sizing, card effects, and category chips from the game-list guide. */
+.chips { gap: 8px; padding: 14px 16px 0; }
+.chip { padding: 8px 14px; border: 1px solid transparent; border-radius: 999px; background: #1c2030; color: rgba(255, 255, 255, 0.55); font-size: 12px; }
+.chip.active { border-color: rgba(121, 175, 255, 0.55); background: rgba(45, 126, 255, 0.22); color: #b7d4ff; }
+.games-section { margin-top: 16px; padding: 0 16px 8px; }
+.games-title { margin: 0 0 14px; font-size: 15px; font-weight: 700; }
+.games-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.game-tile { min-width: 0; gap: 6px; animation: fadeSlideUp .5s cubic-bezier(.23, 1, .32, 1) both; }
+.game-tile:disabled { cursor: wait; opacity: .72; }
+.game-art {
+  width: 100%;
+  aspect-ratio: 100 / 133;
+  overflow: hidden;
+  border: 0;
+  border-radius: 14px;
+  background-size: cover;
+  box-shadow: 0 4px 20px var(--game-glow, rgba(75, 51, 13, .16));
+  transform: perspective(700px) rotateX(var(--game-tilt-x, 0deg)) rotateY(var(--game-tilt-y, 0deg));
+  transform-style: preserve-3d;
+  transition: transform 180ms ease, box-shadow 180ms ease, outline-color 180ms ease;
+  animation: none;
+}
+.game-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.game-art::before { content: ""; position: absolute; z-index: 1; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 20%, rgba(255, 255, 255, .22), transparent 55%); }
+.game-art::after { content: ""; position: absolute; z-index: 2; inset: 0; display: block; pointer-events: none; background-image: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, .16) 50%, transparent 70%); background-size: 300% 100%; animation: shimmerMove 3.5s linear infinite; }
+.game-tile:hover .game-art, .game-tile:focus-visible .game-art { outline: 1.5px solid var(--game-glow-hover, rgba(213, 150, 18, .4)); outline-offset: 1px; box-shadow: 0 16px 40px var(--game-glow-hover, rgba(75, 51, 13, .4)); }
+.game-art-placeholder { position: absolute; inset: 0; display: grid; place-items: center; padding: 12px; color: #fff8e9; font-size: 14px; font-weight: 900; text-align: center; text-shadow: 0 2px 8px rgba(0, 0, 0, .45); }
+.game-players { display: flex; min-height: 13px; align-items: center; gap: 5px; color: rgba(52, 39, 25, .58); font-size: 10px; font-weight: 650; line-height: 1; }
+.game-players i { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 0 rgba(34, 197, 94, .46); animation: playersPulse 1.8s ease-out infinite; }
+.games-empty { padding: 28px 16px; }
+
+@keyframes playersPulse {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, .42); }
+  70% { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+@media (max-width: 720px) {
+  .admin-game-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-game-heading h2 { font-size: 17px; }
+  .admin-game-heading p { max-width: 235px; line-height: 1.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-tile, .game-art::after, .game-players i { animation: none; }
+  .game-art { transition: none; }
+}
+
 @media (max-width: 1050px) {
   .admin-sidebar { width: 205px; flex-basis: 205px; }
   .admin-page-content { padding-right: 18px; padding-left: 18px; }

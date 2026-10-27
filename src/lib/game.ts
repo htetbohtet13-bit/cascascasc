@@ -1,4 +1,18 @@
 export type GameSession = { uid: string; token: string };
+export type Game = {
+  id: number | string;
+  game_id: number;
+  room_id: number;
+  name: string;
+  category: "slots" | "cards" | "buffalo" | "other";
+  image_url: string | null;
+  gradient_start: string;
+  gradient_end: string;
+  players_online: number | null;
+  is_popular: boolean;
+  is_active: boolean;
+  sort_order: number;
+};
 export type SlotBet = {
   bet_uid: string;
   round_id: string | null;
@@ -19,6 +33,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function issueGameToken() {
   return request<GameSession>("/api/game/session", { method: "POST" });
+}
+
+export async function loadGames() {
+  const payload = await request<{ games: Game[] }>("/api/games");
+  return payload.games;
 }
 
 export async function launchGame(gameId: number, roomId: number) {

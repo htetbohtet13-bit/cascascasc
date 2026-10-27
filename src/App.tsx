@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { authenticate, getSession, signOut } from "./lib/auth";
-import { launchGame, loadSlotBets, type SlotBet } from "./lib/game";
+import { launchGame, loadGames, loadSlotBets, type Game, type SlotBet } from "./lib/game";
 import WalletCenter from "./WalletCenter";
 import AdminDashboard from "./AdminDashboard";
 
@@ -74,6 +74,7 @@ function friendlyAuthError(message: string) {
 }
 
 export default function App() {
+  const isAdminRoute = window.location.pathname.replace(/\/+$/, "") === "/admin";
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [bets, setBets] = useState<SlotBet[]>([]);
@@ -86,6 +87,9 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [copiedUid, setCopiedUid] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [games, setGames] = useState<Game[]>([]);
+  const [gamesLoading, setGamesLoading] = useState(true);
+  const [failedGameImages, setFailedGameImages] = useState<Record<string, boolean>>({});
   const [walletOpen, setWalletOpen] = useState(false);
   const [walletMode, setWalletMode] = useState<"deposit" | "withdraw">("deposit");
   const [navTab, setNavTab] = useState<NavTab>("games");
@@ -96,9 +100,31 @@ export default function App() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (isAdminRoute) {
+      setReady(true);
+      return;
+    }
     getSession().then((data) => setSession(data?.user ? data as Session : null))
       .catch(() => setSession(null))
       .finally(() => setReady(true));
+  }, []);
+
+  useEffect(() => {
+    if (isAdminRoute) return;
+    let active = true;
+    loadGames()
+      .then((items) => {
+        if (active) setGames(items);
+      })
+      .catch(() => {
+        if (active) setGames([]);
+      })
+      .finally(() => {
+        if (active) setGamesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -167,7 +193,7 @@ export default function App() {
     }
   }
 
-  async function onPlayBuffalo() {
+  async function onPlayGame(game: Game) {
     if (!session) {
       openAuth("signup");
       return;
@@ -176,7 +202,7 @@ export default function App() {
     setPlaying(true);
     setError("");
     try {
-      const url = await launchGame(23, 1);
+      const url = await launchGame(game.game_id, game.room_id);
       window.location.assign(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not open the game");
@@ -306,7 +332,11 @@ export default function App() {
     session?.user.name ??
     "—";
   const balance = profile?.balance ?? 0;
-  const showBuffalo = gameFilter !== "cards";
+  const visibleGames = games.filter((game) => {
+    if (gameFilter === "all") return true;
+    if (gameFilter === "popular") return game.is_popular;
+    return game.category === gameFilter;
+  });
   const sectionTitle =
     gameFilter === "all"
       ? "အားလုံးဂိမ်းများ"
@@ -317,9 +347,7 @@ export default function App() {
           : "ကျွဲဂိမ်းများ";
   const bannerSrc = bannerFailed[bannerIdx] ? "/images/JL-banner.jpg" : BANNERS[bannerIdx];
 
-  if (window.location.pathname.replace(/\/+$/, "") === "/admin") {
-    return <AdminDashboard />;
-  }
+  if (isAdminRoute) return <AdminDashboard />;
 
   return (
     <div className="telegram-app-root">
@@ -475,16 +503,48 @@ export default function App() {
 
                 <div className="games-section">
                   <p className="games-title">{sectionTitle}</p>
-                  {showBuffalo ? (
+                  {visibleGames.length ? (
                     <div className="games-grid">
-                      <button type="button" className="game-tile" onClick={onPlayBuffalo} disabled={playing}>
-                        <div className="game-art">
-                          <img src="/images/buffalo.png" alt="Buffalo" />
-                        </div>
-                      </button>
+                      {visibleGames.map((game, index) => {
+                        const artStyle = {
+                          "--game-glow": `${game.gradient_start}47`,
+                          "--game-glow-hover": `${game.gradient_start}66`,
+                          backgroundImage: `linear-gradient(155deg, ${game.gradient_start}, ${game.gradient_end})`,
+                          animationDelay: `${index * 0.03}s`,
+                        } as CSSProperties;
+                        const gameKey = String(game.id);
+                        return (
+                          <button key={gameKey} type="button" className="game-tile" onClick={() => void onPlayGame(game)} disabled={playing}>
+                            <div
+                              className="game-art"
+                              style={artStyle}
+                              onMouseMove={(event) => {
+                                const rect = event.currentTarget.getBoundingClientRect();
+                                const x = (event.clientX - rect.left) / rect.width - 0.5;
+                                const y = (event.clientY - rect.top) / rect.height - 0.5;
+                                event.currentTarget.style.setProperty("--game-tilt-x", `${-y * 18}deg`);
+                                event.currentTarget.style.setProperty("--game-tilt-y", `${x * 18}deg`);
+                              }}
+                              onMouseLeave={(event) => {
+                                event.currentTarget.style.setProperty("--game-tilt-x", "0deg");
+                                event.currentTarget.style.setProperty("--game-tilt-y", "0deg");
+                              }}
+                            >
+                              {game.image_url && !failedGameImages[gameKey] ? (
+                                <img src={game.image_url} alt={game.name} onError={() => setFailedGameImages((current) => ({ ...current, [gameKey]: true }))} />
+                              ) : (
+                                <span className="game-art-placeholder">{game.name}</span>
+                              )}
+                            </div>
+                            {game.players_online !== null ? (
+                              <span className="game-players"><i aria-hidden="true" /> {game.players_online.toLocaleString("en-US")} players</span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
-                    <div className="games-empty">ဂိမ်းမရှိသေးပါ</div>
+                    <div className="games-empty">{gamesLoading ? "ဂိမ်းဖွင့်နေသည်…" : "ဂိမ်းမရှိသေးပါ"}</div>
                   )}
                 </div>
 

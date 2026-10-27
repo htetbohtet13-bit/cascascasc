@@ -8,6 +8,7 @@ import meHandler from "../api/me.js";
 import betsHandler from "../api/profile/bets.js";
 import authRequestHandler from "../api/auth/[...all].js";
 import { handleAdminApi } from "./admin-api.mjs";
+import { listActiveGames } from "./games.mjs";
 
 const port = Number(process.env.SLOT_API_PORT ?? 8787);
 
@@ -39,6 +40,10 @@ const server = http.createServer(async (req, rawRes) => {
     if (path.startsWith("/api/auth/")) return authRequestHandler(req, res);
     if (path === "/api/me") return meHandler(req, res);
     if (path === "/api/profile/bets") return betsHandler(req, res);
+    if (path === "/api/games") {
+      if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
+      return res.status(200).json({ games: await listActiveGames() });
+    }
     if (path === "/api/admin") {
       res.setHeader("Cache-Control", "private, no-store");
       const result = await handleAdminApi(req);

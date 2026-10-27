@@ -80,7 +80,9 @@ async function overview(pool) {
        (select count(*) from public.withdrawals) as withdrawal_count,
        (select count(*) from public.withdrawals where status = 'pending') as pending_withdrawals,
        (select coalesce(sum(amount), 0) from public.withdrawals where status = 'paid') as withdrawal_total,
-       (select count(*) from public.withdrawals where status = 'failed') as failed_withdrawals`,
+       (select count(*) from public.withdrawals where status = 'failed') as failed_withdrawals,
+       (select count(*) from public.games) as games_total,
+       (select count(*) from public.games where is_active = true) as active_games`,
   );
   const [latestWithdrawals, latestBets] = await Promise.all([
     pool.query(
@@ -169,6 +171,77 @@ async function walletList(pool, url, kind) {
   return { [kind === "deposit" ? "deposits" : "withdrawals"]: list.rows, total: Number(count.rows[0]?.total ?? 0), page, pageSize: limit };
 }
 
+function validateGame(body) {
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const gameId = Number(body.game_id);
+  const roomId = Number(body.room_id);
+  const category = String(body.category ?? "slots");
+  const imageUrl = typeof body.image_url === "string" ? body.image_url.trim() : "";
+  const gradientStart = String(body.gradient_start ?? "#5c3918");
+  const gradientEnd = String(body.gradient_end ?? "#d59612");
+  const playersOnline = body.players_online === "" || body.players_online == null ? null : Number(body.players_online);
+  const sortOrder = Number(body.sort_order ?? 0);
+  const safeImageUrl = !imageUrl || (imageUrl.startsWith("/images/") && !imageUrl.startsWith("//")) || (() => {
+    try { return new URL(imageUrl).protocol === "https:"; } catch { return false; }
+  })();
+  if (!name || name.length > 80) return { error: "Game name must be 1 to 80 characters" };
+  if (!Number.isSafeInteger(gameId) || gameId < 1 || gameId > 2_147_483_647) return { error: "Enter a valid game ID" };
+  if (!Number.isSafeInteger(roomId) || roomId < 1 || roomId > 2_147_483_647) return { error: "Enter a valid room ID" };
+  if (!["slots", "cards", "buffalo", "other"].includes(category)) return { error: "Choose a valid game category" };
+  if (!safeImageUrl) return { error: "Image must be an HTTPS link or a local /images/ path" };
+  if (imageUrl.length > 2048) return { error: "Image link is too long" };
+  if (!/^#[0-9a-f]{6}$/i.test(gradientStart) || !/^#[0-9a-f]{6}$/i.test(gradientEnd)) return { error: "Choose valid gradient colors" };
+  if (playersOnline !== null && (!Number.isSafeInteger(playersOnline) || playersOnline < 0 || playersOnline > 2_147_483_647)) return { error: "Players online must be a non-negative whole number" };
+  if (!Number.isSafeInteger(sortOrder) || sortOrder < -1_000_000 || sortOrder > 1_000_000) return { error: "Sort order is out of range" };
+  return {
+    values: [gameId, roomId, name, category, imageUrl || null, gradientStart, gradientEnd,
+      playersOnline, Boolean(body.is_popular), Boolean(body.is_active), sortOrder],
+  };
+}
+
+async function manageGame(pool, action, body) {
+  if (action === "delete_game") {
+    const id = Number(body.id);
+    if (!Number.isSafeInteger(id) || id < 1) return { status: 400, body: { error: "Invalid game record" } };
+    const result = await pool.query("delete from public.games where id = $1 returning id", [id]);
+    return result.rowCount
+      ? { status: 200, body: { ok: true } }
+      : { status: 404, body: { error: "Game not found" } };
+  }
+
+  const parsed = validateGame(body);
+  if (parsed.error) return { status: 400, body: { error: parsed.error } };
+  const [gameId, roomId, name, category, imageUrl, gradientStart, gradientEnd, playersOnline, isPopular, isActive, sortOrder] = parsed.values;
+  const recordId = Number(body.id);
+  if (action === "update_game" && (!Number.isSafeInteger(recordId) || recordId < 1)) {
+    return { status: 400, body: { error: "Invalid game record" } };
+  }
+  try {
+    const result = action === "create_game"
+      ? await pool.query(
+        `insert into public.games
+           (provider_game_id, room_id, name, category, image_url, gradient_start, gradient_end, players_online, is_popular, is_active, sort_order)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         returning id`,
+        [gameId, roomId, name, category, imageUrl, gradientStart, gradientEnd, playersOnline, isPopular, isActive, sortOrder],
+      )
+      : await pool.query(
+        `update public.games
+            set provider_game_id = $2, room_id = $3, name = $4, category = $5, image_url = $6,
+                gradient_start = $7, gradient_end = $8, players_online = $9, is_popular = $10,
+                is_active = $11, sort_order = $12, updated_at = now()
+          where id = $1
+          returning id`,
+        [recordId, gameId, roomId, name, category, imageUrl, gradientStart, gradientEnd, playersOnline, isPopular, isActive, sortOrder],
+      );
+    if (!result.rowCount) return { status: 404, body: { error: "Game not found" } };
+    return { status: 200, body: { ok: true, id: result.rows[0].id } };
+  } catch (error) {
+    if (error?.code === "23505") return { status: 409, body: { error: "That game ID and room are already listed" } };
+    throw error;
+  }
+}
+
 async function userDetails(pool, userId) {
   if (!UUID_RE.test(userId)) return { status: 400, body: { error: "Invalid user id" } };
   const [profile, bets, deposits, withdrawals] = await Promise.all([
@@ -204,7 +277,14 @@ export async function handleAdminApi(req) {
         body: { ok: true },
       };
     }
-    return { status: 400, body: { error: "Unknown admin action" } };
+    if (!["create_game", "update_game", "delete_game"].includes(action)) return { status: 400, body: { error: "Unknown admin action" } };
+    if (!validAdminSession(req, secret)) return { status: 401, body: { error: "Enter the admin password to continue" } };
+    try {
+      return await manageGame(getPool(), action, req.body ?? {});
+    } catch (error) {
+      console.error("Admin game update failed", error);
+      return { status: 500, body: { error: "Could not save game details" } };
+    }
   }
   if (req.method !== "GET") return { status: 405, body: { error: "Method not allowed" } };
   if (!validAdminSession(req, secret)) return { status: 401, body: { error: "Enter the admin password to continue" } };
@@ -215,6 +295,14 @@ export async function handleAdminApi(req) {
   try {
     if (view === "overview") return { status: 200, body: await overview(pool) };
     if (view === "users") return { status: 200, body: await users(pool, url) };
+    if (view === "games") {
+      const result = await pool.query(
+        `select id, provider_game_id as game_id, room_id, name, category, image_url,
+                gradient_start, gradient_end, players_online, is_popular, is_active, sort_order, created_at
+           from public.games order by sort_order asc, id asc`,
+      );
+      return { status: 200, body: { games: result.rows } };
+    }
     if (view === "bets") return { status: 200, body: await bets(pool, url) };
     if (view === "deposits") return { status: 200, body: await walletList(pool, url, "deposit") };
     if (view === "withdrawals") return { status: 200, body: await walletList(pool, url, "withdraw") };

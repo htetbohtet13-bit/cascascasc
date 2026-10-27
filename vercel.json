@@ -32,6 +32,9 @@
     },
     "api/admin/index.js": {
       "includeFiles": "server/**"
+    },
+    "api/games.js": {
+      "includeFiles": "server/**"
     }
   },
   "rewrites": [
