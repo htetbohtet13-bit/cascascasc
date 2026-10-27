@@ -31,6 +31,10 @@ export async function issueGameToken(userId) {
 }
 
 export async function getSlotBalance(uid, token) {
+  uid = String(uid ?? "").trim();
+  token = String(token ?? "").trim();
+  if (!uid || uid.length > 50 || !token || token.length > 256) return { ok: false };
+
   const result = await getPool().query(
     `select p.balance
        from public.game_tokens t
@@ -47,13 +51,20 @@ export async function applySlotChange(params) {
   const token = String(params.token ?? "").trim();
   const betUid = String(params.bet_uid ?? "").trim();
   const roundId = String(params.round_id ?? "").trim() || null;
-  const bet = asInt(params.bet, 0);
-  const win = asInt(params.win, 0);
-  const change = asInt(params.changemoney, win - bet);
+  const bet = asInt(params.bet);
+  const win = asInt(params.win);
+  const change = asInt(params.changemoney);
   const roomId = asInt(params.roomId ?? params.roomid);
   const gameId = asInt(params.gameId ?? params.gameid);
 
-  if (!uid || !token || !betUid || betUid.length > 160 || bet === null || win === null || change === null || bet < 0 || win < 0) {
+  if (
+    !uid || uid.length > 50 || !token || token.length > 256 ||
+    !betUid || betUid.length > 160 || !roundId || roundId.length > 160 ||
+    bet === null || win === null || change === null ||
+    !Number.isSafeInteger(win - bet) || change !== win - bet ||
+    roomId === null || roomId < 1 || gameId === null || gameId < 1 ||
+    bet < 0 || win < 0
+  ) {
     return { ok: false, message: "Invalid bet details" };
   }
 
@@ -70,12 +81,18 @@ export async function applySlotChange(params) {
     if (!profile.rowCount) return { ok: false, message: "Invalid game token" };
 
     const previous = await client.query(
-      "select user_id, uid, balance_after from public.slot_bets where bet_uid = $1",
+      `select user_id, uid, round_id, changemoney, bet, win, room_id, game_id, balance_after
+         from public.slot_bets where bet_uid = $1`,
       [betUid],
     );
     if (previous.rowCount) {
       const row = previous.rows[0];
-      if (row.user_id === profile.rows[0].id && row.uid === uid) {
+      if (
+        row.user_id === profile.rows[0].id && row.uid === uid &&
+        row.round_id === roundId && Number(row.changemoney) === change &&
+        Number(row.bet) === bet && Number(row.win) === win &&
+        Number(row.room_id) === roomId && Number(row.game_id) === gameId
+      ) {
         return { ok: true, balance: Number(row.balance_after) };
       }
       return { ok: false, message: "Bet reference already used" };

@@ -19,11 +19,15 @@ function adaptResponse(res) {
   return res;
 }
 
-async function readJson(req) {
+async function readBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   const text = Buffer.concat(chunks).toString("utf8");
   if (!text) return {};
+  const contentType = String(req.headers["content-type"] ?? "").toLowerCase();
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    return Object.fromEntries(new URLSearchParams(text));
+  }
   try { return JSON.parse(text); } catch { return {}; }
 }
 
@@ -36,7 +40,7 @@ const server = http.createServer(async (req, rawRes) => {
       return proxySlot(req, res, path === "/api/slot/balance" ? "balance" : "change");
     }
     if (req.method === "OPTIONS") return res.status(204).end();
-    if (req.method === "POST" || req.method === "PUT") req.body = await readJson(req);
+    if (req.method === "POST" || req.method === "PUT") req.body = await readBody(req);
     if (path.startsWith("/api/auth/")) return authRequestHandler(req, res);
     if (path === "/api/me") return meHandler(req, res);
     if (path === "/api/profile/bets") return betsHandler(req, res);

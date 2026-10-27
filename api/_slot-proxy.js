@@ -21,14 +21,22 @@ export async function proxySlot(req, res, route) {
   res.setHeader("Access-Control-Allow-Headers", "*");
   res.setHeader("Cache-Control", "no-store");
   if (req.method === "OPTIONS") return res.status(204).end();
-  if (!isAllowedSlotCaller(req)) return res.status(200).json({ code: 0 });
+  if (req.method !== "POST") return res.status(200).json({ code: 0, msg: "POST required" });
+  if (!isAllowedSlotCaller(req)) return res.status(200).json({ code: 0, msg: "Request not allowed" });
   try {
     const params = asParams(req);
     const result = route === "balance"
       ? await getSlotBalance(params.uid, params.token)
       : await applySlotChange(params);
-    return res.status(200).json(result.ok ? { code: 1, msg: String(result.balance) } : { code: 0 });
-  } catch {
-    return res.status(200).json({ code: 0 });
+    if (!result.ok) {
+      return res.status(200).json({ code: 0, msg: result.message ?? "Invalid request or token" });
+    }
+    if (route === "balance") {
+      return res.status(200).json({ code: 1, msg: "Success", balance: result.balance });
+    }
+    return res.status(200).json({ code: 1, msg: String(result.balance) });
+  } catch (error) {
+    console.error(`Slot ${route} callback failed`, error);
+    return res.status(200).json({ code: 0, msg: "Request failed" });
   }
 }
