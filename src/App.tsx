@@ -24,27 +24,30 @@ const BANNERS = [
 
 const Ic = {
   cashier: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <rect x="1" y="4" width="22" height="16" rx="3" />
-      <line x1="1" y1="10" x2="23" y2="10" />
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 6.5h14.5A2.5 2.5 0 0 1 21 9v9a2 2 0 0 1-2 2H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h13" />
+      <path d="M2.5 9H21M16 14h2.5" />
+      <circle cx="16" cy="14" r=".6" fill="currentColor" />
     </svg>
   ),
   games: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <path d="M8.2 7.5h7.6a5 5 0 0 1 4.8 3.6l1.1 4a3.1 3.1 0 0 1-5.4 2.8l-1.2-1.5H8.9l-1.2 1.5a3.1 3.1 0 0 1-5.4-2.8l1.1-4a5 5 0 0 1 4.8-3.6z" />
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="4" y="3" width="16" height="18" rx="3" />
+      <path d="M4 8h16M8 12h.01M12 12h.01M16 12h.01" strokeWidth="2.8" />
+      <path d="M8 16h8" />
     </svg>
   ),
   gift: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <polyline points="20 12 20 22 4 22 4 12" />
-      <rect x="2" y="7" width="20" height="5" />
-      <line x1="12" y1="22" x2="12" y2="7" />
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 10h18v11H3zM2 6h20v4H2zM12 6v15" />
+      <path d="M12 6H8.5a2.5 2.5 0 1 1 2.4-3.2L12 6Zm0 0h3.5a2.5 2.5 0 1 0-2.4-3.2L12 6Z" />
     </svg>
   ),
   profile: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="8" r="3.5" />
-      <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+      <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+      <path d="m17.5 15.5 1.2 1.2 2.3-2.5" />
     </svg>
   ),
   close: (
