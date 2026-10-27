@@ -94,7 +94,10 @@ export async function handleGameLogin({
 
   const selectedGameId = Number(gameId);
   const selectedRoomId = Number(roomId);
-  if (!Number.isSafeInteger(selectedGameId) || selectedGameId < 1 || !Number.isSafeInteger(selectedRoomId) || selectedRoomId < 1) {
+  if (
+    !Number.isSafeInteger(selectedGameId) || selectedGameId < 1 ||
+    !Number.isSafeInteger(selectedRoomId) || selectedRoomId < 1 || selectedRoomId > 4
+  ) {
     return { status: 400, body: { error: "Invalid game selection" } };
   }
   const selectedGame = await getLaunchableGame(selectedGameId, selectedRoomId);
@@ -130,7 +133,7 @@ export async function handleGameLogin({
         uid: tokenData.uid,
         token: tokenData.token,
         gameId: Number(gameId) || 23,
-        roomId: String(roomId || 1),
+        roomId: Number(roomId || 1),
         lobbyUrl,
         domain,
       },
