@@ -49,7 +49,7 @@ const server = http.createServer(async (req, rawRes) => {
       return res.status(result.status).json(result.body);
     }
     if (path.startsWith("/api/wallet/")) {
-      const functionName = { config: "wallet-config", deposit: "wallet-deposit", withdraw: "wallet-withdraw" }[path.split("/").at(-1)];
+      const functionName = { config: "wallet-config", deposit: "wallet-deposit", withdraw: "wallet-withdraw", history: "wallet-history" }[path.split("/").at(-1)];
       if (!functionName) return res.status(404).json({ error: "Not found" });
       const result = await handleWalletProxy({ req, functionName, method: req.method, payload: req.body });
       return res.status(result.status).json(result.body);

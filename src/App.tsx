@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { authenticate, getSession, signOut } from "./lib/auth";
 import { launchGame, loadSlotBets, type SlotBet } from "./lib/game";
-import DepositFlow from "./DepositFlow";
-import Wallet from "./Wallet";
+import WalletCenter from "./WalletCenter";
 
 type Mode = "signin" | "signup";
 type NavTab = "cashier" | "games" | "bonuses" | "profile";
@@ -515,20 +514,10 @@ export default function App() {
             ))}
           </nav>
 
-          {walletOpen && walletMode === "deposit" ? (
-            <DepositFlow
-              onClose={() => {
-                setWalletOpen(false);
-                setNavTab("games");
-              }}
-              onBalance={(next) =>
-                setProfile((current) => (current ? { ...current, balance: next } : current))
-              }
-            />
-          ) : null}
-
-          {walletOpen && walletMode === "withdraw" ? (
-            <Wallet
+          {walletOpen ? (
+            <WalletCenter
+              initialTab={walletMode}
+              balance={balance}
               defaultPhone={phoneNumber === "—" ? "" : phoneNumber}
               onClose={() => {
                 setWalletOpen(false);

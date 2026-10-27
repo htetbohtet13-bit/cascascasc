@@ -5,6 +5,16 @@ export type WalletMethods = {
   wavepay: { label: string; receiver: string; name?: string };
 };
 
+export type WalletHistoryItem = {
+  kind: "deposit" | "withdraw";
+  service_type: PayMethod;
+  amount: number | string;
+  status: "pending" | "verified" | "failed" | "paid";
+  message: string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
 async function walletRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -25,6 +35,11 @@ async function walletRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function loadWalletMethods() {
   return walletRequest<WalletMethods>("/api/wallet/config");
+}
+
+export async function loadWalletHistory() {
+  const payload = await walletRequest<{ history: WalletHistoryItem[] }>("/api/wallet/history");
+  return payload.history;
 }
 
 export function submitDeposit(serviceType: PayMethod, amount: number, transactionId: string) {

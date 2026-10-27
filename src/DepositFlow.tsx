@@ -5,6 +5,7 @@ type FlowStep = 1 | 2 | 3 | 4;
 type SubmitStatus = "idle" | "verifying" | "success" | "failed";
 
 type Props = {
+  embedded?: boolean;
   onClose: () => void;
   onBalance: (balance: number) => void;
 };
@@ -80,7 +81,7 @@ function IconX() {
   );
 }
 
-export default function DepositFlow({ onClose, onBalance }: Props) {
+export default function DepositFlow({ embedded = false, onClose, onBalance }: Props) {
   const [step, setStep] = useState<FlowStep>(1);
   const [method, setMethod] = useState<PayMethod | null>(null);
   const [amount, setAmount] = useState("");
@@ -241,9 +242,9 @@ export default function DepositFlow({ onClose, onBalance }: Props) {
   }
 
   return (
-    <main className="deposit-flow">
+    <main className={`deposit-flow${embedded ? " wallet-embedded" : ""}`}>
       <div className="deposit-glow" />
-      {!directing && step !== 3 ? (
+      {!embedded && !directing && step !== 3 ? (
         <header className="deposit-header">
           <button type="button" className="deposit-icon-btn" onClick={goBack} disabled={step === 4} aria-label="နောက်သို့">
             <IconArrow />

@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { loadWalletMethods, submitWithdraw, type PayMethod } from "./lib/wallet";
 
 type Props = {
+  embedded?: boolean;
+  balance?: number;
   defaultPhone?: string;
   onClose: () => void;
   onBalance: (balance: number) => void;
@@ -15,6 +17,8 @@ const methods: { id: PayMethod; name: string; img: string; cls: string }[] = [
 const quickAmounts = ["1000", "2000", "4000"];
 
 export default function Wallet({
+  embedded = false,
+  balance = 0,
   defaultPhone = "",
   onClose,
   onBalance,
@@ -31,7 +35,7 @@ export default function Wallet({
 
   useEffect(() => {
     loadWalletMethods().catch((err) =>
-      setError(err instanceof Error ? err.message : "Could not load payment methods"),
+      setError(err instanceof Error ? err.message : "ငွေပေးချေမှုနည်းလမ်းများကို ဖွင့်မရပါ"),
     );
   }, []);
 
@@ -39,7 +43,6 @@ export default function Wallet({
     setMethod(next);
     setError("");
     setDone("");
-    setStep(2);
   }
 
   async function onSubmit(event: FormEvent) {
@@ -62,8 +65,8 @@ export default function Wallet({
   }
 
   return (
-    <section className="wallet-sheet">
-      <div className="wallet-head">
+      <section className={`wallet-sheet${embedded ? " wallet-embedded" : ""}`}>
+      {!embedded ? <div className="wallet-head">
         <h2>ငွေထုတ်</h2>
         <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label="Close">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -71,44 +74,50 @@ export default function Wallet({
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
-      </div>
+      </div> : null}
 
       <div className="wallet-body">
-        {step === 1 ? (
+        {step !== 4 ? (
           <>
-            <p className="wallet-title">ဘဏ်ရွေးပါ</p>
-            <p className="wallet-sub">သင်အသုံးပြုမည့် ဘဏ်ကိုရွေးပါ</p>
+            <div className="avail-card">
+              <small>လက်ရှိလက်ကျန်</small>
+              <strong>{balance.toLocaleString("en-US")} <span>Ks</span></strong>
+            </div>
+            <p className="wallet-title">ငွေလက်ခံမည့်ဘဏ်</p>
             <div className="bank-grid">
               {methods.map((item) => (
                 <button
                   key={item.id}
                   type="button"
-                  className={`bank-card ${item.cls}`}
+                  className={`bank-card ${item.cls}${method === item.id ? " selected" : ""}`}
                   onClick={() => chooseMethod(item.id)}
+                  aria-pressed={method === item.id}
                 >
                   <img src={item.img} alt="" />
                   {item.name}
                 </button>
               ))}
             </div>
-            {error ? <p className="error">{error}</p> : null}
-          </>
-        ) : null}
-
-        {step === 2 && method ? (
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              if (!amount || Number(amount) <= 0) {
-                setError("Enter an amount");
+              if (!method) {
+                setError("KBZPay သို့မဟုတ် WavePay ကို ရွေးပါ");
                 return;
               }
-              setError("");
-              setStep(3);
+              if (!amount || Number(amount) <= 0) {
+                setError("ငွေပမာဏ ထည့်ပါ");
+                return;
+              }
+              if (!phone.trim()) {
+                setError("ဖုန်းနံပါတ် ထည့်ပါ");
+                return;
+              }
+              void onSubmit(event);
             }}
           >
             <label className="field">
-              ပမာဏ
+              ငွေပမာဏ
               <div className="field-box">
                 <input
                   type="text"
@@ -128,20 +137,8 @@ export default function Wallet({
                 </button>
               ))}
             </div>
-            {error ? <p className="error">{error}</p> : null}
-            <button className="primary-btn" type="submit">
-              Next
-            </button>
-            <button type="button" className="ghost-btn" onClick={() => setStep(1)}>
-              Back
-            </button>
-          </form>
-        ) : null}
-
-        {step === 3 && method ? (
-          <form onSubmit={onSubmit}>
             <label className="field">
-              Your {method === "kbzpay" ? "KBZPay" : "WavePay"} number
+              {method ? `${method === "kbzpay" ? "KBZPay" : "WavePay"} ဖုန်းနံပါတ်` : "ဖုန်းနံပါတ်"}
               <div className="field-box">
                 <input
                   type="tel"
@@ -154,12 +151,10 @@ export default function Wallet({
             </label>
             {error ? <p className="error">{error}</p> : null}
             <button className="primary-btn" type="submit" disabled={busy}>
-              {busy ? "Sending… this can take up to 90 seconds" : "ငွေထုတ်မည်"}
-            </button>
-            <button type="button" className="ghost-btn" onClick={() => setStep(2)} disabled={busy}>
-              Back
+              {busy ? "လုပ်ဆောင်နေသည်…" : "ငွေထုတ်မည်"}
             </button>
           </form>
+          </>
         ) : null}
 
         {step === 4 ? (
@@ -174,7 +169,7 @@ export default function Wallet({
                 onClick={() => {
                   setDone("");
                   setError("");
-                  setStep(3);
+                  setStep(1);
                 }}
               >
                 Try again

@@ -9,6 +9,18 @@ export function walletMethods() {
   };
 }
 
+export async function walletHistory(userId) {
+  const result = await getPool().query(
+    `select kind, service_type, amount, status, message, created_at, completed_at
+       from public.wallet_orders
+      where user_id = $1::uuid
+      order by created_at desc
+      limit 50`,
+    [userId],
+  );
+  return result.rows;
+}
+
 export async function applyVerifiedDeposit({
   userId,
   orderId,

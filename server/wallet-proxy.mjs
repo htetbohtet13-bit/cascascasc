@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { currentSession } from "./auth.mjs";
 import { paymentConfig } from "./payment-env.mjs";
-import { applyVerifiedDeposit, completeWithdraw, recordWithdrawTransfer, releaseWithdraw, reserveWithdraw, walletMethods } from "./wallet.mjs";
+import { applyVerifiedDeposit, completeWithdraw, recordWithdrawTransfer, releaseWithdraw, reserveWithdraw, walletHistory, walletMethods } from "./wallet.mjs";
 
 const amountOf = (value) => Number(value);
 const phoneOf = (value) => {
@@ -27,6 +27,14 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
 
   if (functionName === "wallet-config") {
     return { status: 200, body: walletMethods() };
+  }
+  if (functionName === "wallet-history") {
+    try {
+      return { status: 200, body: { history: await walletHistory(userId) } };
+    } catch (error) {
+      console.error("Wallet history lookup failed", error);
+      return { status: 500, body: { error: "Could not load wallet history" } };
+    }
   }
 
   const serviceType = ["kbzpay", "wavepay"].includes(payload.service_type) ? payload.service_type : "";
