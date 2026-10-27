@@ -1,7 +1,7 @@
 import http from "node:http";
 import { currentSession } from "./auth.mjs";
 import { issueGameToken } from "./game.mjs";
-import { handleGameLogin } from "./game-login.mjs";
+import { gameLoginFailure, handleGameLogin } from "./game-login.mjs";
 import { handleWalletProxy } from "./wallet-proxy.mjs";
 import { proxySlot } from "../api/_slot-proxy.js";
 import meHandler from "../api/me.js";
@@ -56,9 +56,15 @@ const server = http.createServer(async (req, rawRes) => {
       return res.status(200).json(await issueGameToken(session.user.id));
     }
     if (path === "/api/game-login") {
-      const session = await currentSession(req);
-      const result = await handleGameLogin({ ...req.body, userId: session?.user?.id });
-      return res.status(result.status).json(result.body);
+      try {
+        const session = await currentSession(req);
+        const result = await handleGameLogin({ ...req.body, userId: session?.user?.id });
+        return res.status(result.status).json(result.body);
+      } catch (error) {
+        console.error("Game login failed", error);
+        const result = gameLoginFailure(error);
+        return res.status(result.status).json(result.body);
+      }
     }
     if (path.startsWith("/api/wallet/")) {
       const functionName = { config: "wallet-config", deposit: "wallet-deposit", withdraw: "wallet-withdraw", history: "wallet-history" }[path.split("/").at(-1)];

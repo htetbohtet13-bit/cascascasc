@@ -1,4 +1,4 @@
-import { handleGameLogin } from "../server/game-login.mjs";
+import { gameLoginFailure, handleGameLogin } from "../server/game-login.mjs";
 import { currentSession } from "../server/auth.mjs";
 
 function jsonBody(req) {
@@ -39,17 +39,22 @@ export default async function handler(req, res) {
     return;
   }
 
-  const payload = jsonBody(req);
-  const session = await currentSession(req);
-  const result = await handleGameLogin({
-    userId: session?.user?.id,
-    gameId: Number(payload.gameId ?? 23),
-    roomId: Number(payload.roomId ?? 1),
-    lobbyUrl: lobbyUrl(),
-    domain: process.env.GAME_PROVIDER_DOMAIN ?? "jlwin777.com",
-    gatewayUrl: process.env.GATEWAY_URL,
-    gatewaySecret: process.env.GATEWAY_SECRET,
-  });
-
-  res.status(result.status).json(result.body);
+  try {
+    const payload = jsonBody(req);
+    const session = await currentSession(req);
+    const result = await handleGameLogin({
+      userId: session?.user?.id,
+      gameId: Number(payload.gameId ?? 23),
+      roomId: Number(payload.roomId ?? 1),
+      lobbyUrl: lobbyUrl(),
+      domain: process.env.GAME_PROVIDER_DOMAIN ?? "jlwin777.com",
+      gatewayUrl: process.env.GATEWAY_URL,
+      gatewaySecret: process.env.GATEWAY_SECRET,
+    });
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    console.error("Game login failed", error);
+    const result = gameLoginFailure(error);
+    return res.status(result.status).json(result.body);
+  }
 }

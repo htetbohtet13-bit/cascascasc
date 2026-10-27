@@ -9,6 +9,20 @@ const DEFAULT_LOBBY_URL = "https://j777ml.com";
 const DEFAULT_DOMAIN = "jlwin777.com";
 const DEFAULT_GATEWAY_URL = "http://69.169.109.91:3001/";
 
+export function gameLoginFailure(error) {
+  const detail = String(error?.message ?? "");
+  if (error?.code === "42P01" && detail.includes("public.games")) {
+    return {
+      status: 503,
+      body: { error: "Game list is not set up yet. Run neon/003_game_catalog.sql in Neon SQL Editor." },
+    };
+  }
+  if (error?.name === "TypeError" || error?.code === "ECONNREFUSED" || error?.code === "ETIMEDOUT") {
+    return { status: 502, body: { error: "Could not reach the game service. Please try again." } };
+  }
+  return { status: 500, body: { error: "Could not start the game. Please try again." } };
+}
+
 function parseEnvFile(text) {
   const env = {};
   for (const line of text.split(/\r?\n/)) {
