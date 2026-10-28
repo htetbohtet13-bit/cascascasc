@@ -43,7 +43,11 @@ function gatewayConfig() {
   if (parsedGateway.protocol !== "https:" && parsedGateway.protocol !== "http:") {
     throw new SkmApiError("Gateway URL must use HTTP or HTTPS", { status: 503, code: "CONFIG_INVALID" });
   }
-  return { gatewayUrl, gatewaySecret };
+  const gatewayPath = parsedGateway.pathname.replace(/\/+$/, "");
+  parsedGateway.pathname = gatewayPath.endsWith("/proxy") ? gatewayPath : `${gatewayPath}/proxy`;
+  parsedGateway.search = "";
+  parsedGateway.hash = "";
+  return { gatewayUrl: parsedGateway.toString(), gatewaySecret };
 }
 
 function signature(secret, timestamp, rawBody) {
