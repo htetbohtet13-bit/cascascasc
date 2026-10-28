@@ -1,5 +1,5 @@
 import { createSkmGameSession } from "./skm-wallet.mjs";
-import { callSkmApi, listProviderGames, manualGameByCode, SkmApiError } from "./skm-api.mjs";
+import { callSkmApi, listProviderGames, SkmApiError } from "./skm-api.mjs";
 
 const CURRENCY = "MMK";
 
@@ -32,13 +32,8 @@ export async function handleGameLogin({ userId, gameCode, tableId, device = "mob
     return { status: 400, body: { error: "Choose a valid stake level" } };
   }
 
-  let games = [];
-  try {
-    games = await listProviderGames();
-  } catch (error) {
-    if (!manualGameByCode(gameCode)) throw error;
-  }
-  const selectedGame = games.find((game) => game?.game_code === gameCode) ?? manualGameByCode(gameCode);
+  const games = await listProviderGames();
+  const selectedGame = games.find((game) => game?.game_code === gameCode);
   if (!selectedGame) return { status: 404, body: { error: "This game is not available" } };
 
   const selectedTableId = String(tableId ?? "").trim();
