@@ -123,10 +123,12 @@ export async function callSkmApi(path, { method = "GET", payload } = {}) {
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { /* preserve a safe generic provider error */ }
   if (!response.ok) {
-    const code = String(data?.error ?? "PROVIDER_ERROR");
-    const message = typeof data?.message === "string"
-      ? data.message
-      : typeof data?.error === "string" ? data.error : "The game provider rejected the request";
+    const errorData = data?.error && typeof data.error === "object" ? data.error : data;
+    const code = String(errorData?.code ?? errorData?.error_code ?? (typeof data?.error === "string" ? data.error : "PROVIDER_ERROR"));
+    const message = [errorData?.message, errorData?.detail, errorData?.error_description,
+      typeof data?.error === "string" ? data.error : undefined]
+      .find((value) => typeof value === "string" && value.trim())
+      ?? (text.trim() ? text.trim().slice(0, 400) : "The game provider rejected the request");
     throw new SkmApiError(message, { status: response.status, code });
   }
   return data;
