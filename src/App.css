@@ -3816,8 +3816,9 @@
 }
 .games-section { margin-top: 16px; padding: 0 16px 8px; }
 .games-title { margin: 0 0 14px; font-size: 15px; font-weight: 700; }
-.games-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.game-tile { min-width: 0; gap: 6px; animation: fadeSlideUp .5s cubic-bezier(.23, 1, .32, 1) both; }
+.games-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 10px; row-gap: 6px; }
+.game-tile { min-width: 0; gap: 4px; animation: fadeSlideUp .5s cubic-bezier(.23, 1, .32, 1) both; }
+.game-provider-label { margin-top: 0; }
 .game-tile:disabled { cursor: wait; opacity: .72; }
 .game-art {
   width: 100%;
