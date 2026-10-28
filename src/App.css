@@ -327,6 +327,121 @@
   font-size: 12px;
 }
 
+.game-provider-label {
+  display: block;
+  margin-top: 6px;
+  color: rgba(255, 255, 255, .58);
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.game-stake-overlay {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  padding: 16px;
+  background: rgba(5, 8, 14, .72);
+  backdrop-filter: blur(8px);
+}
+
+.game-stake-sheet {
+  position: relative;
+  width: min(100%, 430px);
+  max-height: min(82vh, 720px);
+  overflow-y: auto;
+  padding: 26px 20px 24px;
+  border: 1px solid rgba(255, 205, 110, .25);
+  border-radius: 24px 24px 18px 18px;
+  background: linear-gradient(160deg, #171a22, #10131a 72%);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, .5), 0 0 36px rgba(209, 150, 48, .12);
+  color: #fff;
+}
+
+.game-stake-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .09);
+  color: #fff;
+}
+
+.game-stake-kicker {
+  color: #d6a84e;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.game-stake-sheet h2 {
+  max-width: calc(100% - 42px);
+  margin: 8px 0 4px;
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.game-stake-sheet > p {
+  margin: 0 0 18px;
+  color: rgba(255, 255, 255, .6);
+  font-size: 13px;
+}
+
+.game-stake-options {
+  display: grid;
+  gap: 10px;
+}
+
+.game-stake-options > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 68px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, .045);
+  color: #fff;
+  text-align: left;
+}
+
+.game-stake-options > button:disabled {
+  opacity: .7;
+}
+
+.game-stake-options > button > span {
+  display: grid;
+  gap: 5px;
+}
+
+.game-stake-options strong {
+  font-size: 14px;
+}
+
+.game-stake-options small {
+  color: rgba(255, 255, 255, .5);
+  font-size: 10px;
+}
+
+.game-stake-options b {
+  flex: 0 0 auto;
+  color: #e7bd66;
+  font-size: 11px;
+}
+
+.game-stake-error {
+  margin: 14px 0 0;
+}
+
 .fab-wrap {
   padding: 28px 16px 8px;
   display: flex;

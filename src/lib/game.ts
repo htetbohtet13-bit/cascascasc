@@ -1,17 +1,25 @@
-export type GameSession = { uid: string; token: string };
-export type Game = {
-  id: number | string;
-  game_id: number;
-  room_id: number;
+export type GamePool = {
+  pool_id: string;
   name: string;
-  category: "slots" | "cards" | "buffalo" | "other";
-  image_url: string | null;
-  gradient_start: string;
-  gradient_end: string;
-  players_online: number | null;
-  is_popular: boolean;
-  is_active: boolean;
-  sort_order: number;
+  currency: string;
+  max_seats: number;
+  tables_open?: number;
+  max_tables?: number;
+  limits?: { min_bet?: number; max_bet?: number; required_amount?: number };
+};
+export type GameTable = {
+  table_id: string;
+  name: string;
+  currency: string;
+  max_seats: number;
+  limits?: { min_bet?: number; max_bet?: number; required_amount?: number };
+};
+export type Game = {
+  game_code: string;
+  name: string;
+  pools?: GamePool[];
+  tables?: GameTable[];
+  image_url?: string | null;
 };
 export type SlotBet = {
   bet_uid: string;
@@ -31,19 +39,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
-export function issueGameToken() {
-  return request<GameSession>("/api/game/session", { method: "POST" });
-}
-
 export async function loadGames() {
   const payload = await request<{ games: Game[] }>("/api/games");
   return payload.games;
 }
 
-export async function launchGame(gameId: number, roomId: number) {
+export async function launchGame(gameCode: string, tableId: string) {
   const payload = await request<{ url?: string; error?: string }>("/api/game-login", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ gameId, roomId }),
+    body: JSON.stringify({ game_code: gameCode, table_id: tableId }),
   });
   if (!payload.url) throw new Error(payload.error ?? "Could not open the game");
   return payload.url;

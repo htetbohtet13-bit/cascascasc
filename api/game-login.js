@@ -15,15 +15,6 @@ function jsonBody(req) {
   return {};
 }
 
-function lobbyUrl() {
-  if (process.env.LOBBY_URL) return process.env.LOBBY_URL;
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  }
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "https://www.j777ml.com";
-}
-
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -44,12 +35,9 @@ export default async function handler(req, res) {
     const session = await currentSession(req);
     const result = await handleGameLogin({
       userId: session?.user?.id,
-      gameId: Number(payload.gameId ?? 23),
-      roomId: Number(payload.roomId ?? 1),
-      lobbyUrl: lobbyUrl(),
-      domain: process.env.GAME_PROVIDER_DOMAIN ?? "jlwin777.com",
-      gatewayUrl: process.env.GATEWAY_URL,
-      gatewaySecret: process.env.GATEWAY_SECRET,
+      gameCode: payload.game_code,
+      tableId: payload.table_id,
+      device: /mobile|android|iphone/i.test(String(req.headers["user-agent"] ?? "")) ? "mobile" : "desktop",
     });
     return res.status(result.status).json(result.body);
   } catch (error) {

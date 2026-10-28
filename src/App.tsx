@@ -6,15 +6,58 @@ import AdminDashboard from "./AdminDashboard";
 
 type Mode = "signin" | "signup";
 type NavTab = "cashier" | "games" | "bonuses" | "profile";
-type GameFilter = "all" | "popular" | "cards" | "buffalo";
+type GameFilter = "all" | "cards" | "slots";
 
 type Profile = {
   phone: string;
   balance: number;
-  game_uid: string;
   created_at: string;
 };
 type Session = { user: { id: string; name?: string; username?: string } };
+
+type GameLaunchOption = {
+  id: string;
+  tableId: string;
+  name: string;
+  minBet?: number;
+  maxBet?: number;
+};
+
+const TABLE_GAME_CODES = new Set([
+  "shankoemee", "bugyee", "abcd", "dragontiger", "myanmarpoker13card", "shankoemee3d",
+]);
+
+const GAME_PALETTES: ReadonlyArray<readonly [string, string]> = [
+  ["#31200f", "#a87320"], ["#102e2b", "#168c76"], ["#30151a", "#ae3f32"],
+  ["#1a2441", "#4b69a7"], ["#292014", "#8e7129"], ["#25182d", "#7950a2"],
+];
+
+function gamePalette(code: string): readonly [string, string] {
+  const score = [...code].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return GAME_PALETTES[score % GAME_PALETTES.length];
+}
+
+function gameLaunchOptions(game: Game): GameLaunchOption[] {
+  const pools = (game.pools ?? [])
+    .filter((pool) => pool.currency === "MMK")
+    .map((pool) => ({
+      id: `pool-${pool.pool_id}`,
+      tableId: pool.pool_id,
+      name: pool.name,
+      minBet: pool.limits?.min_bet,
+      maxBet: pool.limits?.max_bet,
+    }));
+  const tables = (game.tables ?? [])
+    .filter((table) => table.currency === "MMK")
+    .map((table) => ({
+      id: `table-${table.table_id}`,
+      tableId: table.table_id,
+      name: table.name,
+      minBet: table.limits?.min_bet,
+      maxBet: table.limits?.max_bet,
+    }));
+  return [...pools, ...tables];
+}
 
 const BANNERS = [
   "https://9blqhfvaufeml8ge.public.blob.vercel-storage.com/banners/ChatGPT%20Image%20Jul%2029%2C%202026%2C%2008_27_15%20PM.webp",
@@ -85,15 +128,15 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [copiedUid, setCopiedUid] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [games, setGames] = useState<Game[]>([]);
   const [gamesLoading, setGamesLoading] = useState(true);
   const [failedGameImages, setFailedGameImages] = useState<Record<string, boolean>>({});
   const [walletOpen, setWalletOpen] = useState(false);
   const [walletMode, setWalletMode] = useState<"deposit" | "withdraw">("deposit");
   const [navTab, setNavTab] = useState<NavTab>("games");
-  const [gameFilter, setGameFilter] = useState<GameFilter>("popular");
+  const [gameFilter, setGameFilter] = useState<GameFilter>("all");
   const [bannerIdx, setBannerIdx] = useState(0);
   const [bannerFailed, setBannerFailed] = useState<Record<number, boolean>>({});
   const [scrolled, setScrolled] = useState(false);
@@ -114,7 +157,10 @@ export default function App() {
     let active = true;
     loadGames()
       .then((items) => {
-        if (active) setGames(items);
+        if (active) setGames(items.filter((game) =>
+          (game.pools ?? []).some((pool) => pool.currency === "MMK") ||
+          (game.tables ?? []).some((table) => table.currency === "MMK"),
+        ));
       })
       .catch(() => {
         if (active) setGames([]);
@@ -184,6 +230,7 @@ export default function App() {
       setProfile(null);
       setNavTab("games");
       setWalletOpen(false);
+      setSelectedGame(null);
       setMode("signup");
       setAuthOpen(true);
     } catch (err) {
@@ -193,31 +240,25 @@ export default function App() {
     }
   }
 
-  async function onPlayGame(game: Game) {
+  function onPlayGame(game: Game) {
     if (!session) {
+      setSelectedGame(game);
       openAuth("signup");
       return;
     }
+    setError("");
+    setSelectedGame(game);
+  }
 
+  async function onSelectStake(game: Game, tableId: string) {
     setPlaying(true);
     setError("");
     try {
-      const url = await launchGame(game.game_id, game.room_id);
+      const url = await launchGame(game.game_code, tableId);
       window.location.assign(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not open the game");
       setPlaying(false);
-    }
-  }
-
-  async function onCopyGameUid() {
-    const uid = profile?.game_uid;
-    if (!uid) return;
-    try {
-      await navigator.clipboard.writeText(uid);
-      setCopiedUid(true);
-    } catch {
-      setError("Game ID ကို ကူးယူ၍မရပါ");
     }
   }
 
@@ -334,18 +375,17 @@ export default function App() {
   const balance = profile?.balance ?? 0;
   const visibleGames = games.filter((game) => {
     if (gameFilter === "all") return true;
-    if (gameFilter === "popular") return game.is_popular;
-    return game.category === gameFilter;
+    const isTableGame = TABLE_GAME_CODES.has(game.game_code);
+    return gameFilter === "cards" ? isTableGame : !isTableGame;
   });
   const sectionTitle =
     gameFilter === "all"
       ? "အားလုံးဂိမ်းများ"
-      : gameFilter === "popular"
-        ? "ရေပန်းစားသော ဂိမ်းများ"
-        : gameFilter === "cards"
-          ? "ကတ်ဂိမ်းများ"
-          : "ကျွဲဂိမ်းများ";
+      : gameFilter === "cards"
+        ? "ကတ်ဂိမ်းများ"
+        : "Slot ဂိမ်းများ";
   const bannerSrc = bannerFailed[bannerIdx] ? "/images/JL-banner.jpg" : BANNERS[bannerIdx];
+  const stakeOptions = selectedGame ? gameLaunchOptions(selectedGame) : [];
 
   if (isAdminRoute) return <AdminDashboard />;
 
@@ -394,13 +434,6 @@ export default function App() {
                       <strong>{phoneNumber}</strong>
                       <span>J777 အဖွဲ့ဝင်</span>
                     </div>
-                  </div>
-                  <div className="profile-uid-row">
-                    <span>ဂိမ်းအကောင့် ID</span>
-                    <strong>{profile?.game_uid ?? "—"}</strong>
-                    <button type="button" onClick={onCopyGameUid} disabled={!profile?.game_uid}>
-                      {copiedUid ? "ကူးပြီးပါပြီ" : "ကူးယူရန်"}
-                    </button>
                   </div>
                 </section>
 
@@ -485,9 +518,8 @@ export default function App() {
                   {(
                     [
                       ["all", "အားလုံး"],
-                      ["popular", "ရေပန်းစား"],
                       ["cards", "ကတ်ဂိမ်း"],
-                      ["buffalo", "ကျွဲဂိမ်း"],
+                      ["slots", "Slot ဂိမ်း"],
                     ] as const
                   ).map(([id, label]) => (
                     <button
@@ -506,15 +538,16 @@ export default function App() {
                   {visibleGames.length ? (
                     <div className="games-grid">
                       {visibleGames.map((game, index) => {
+                        const [gradientStart, gradientEnd] = gamePalette(game.game_code);
                         const artStyle = {
-                          "--game-glow": `${game.gradient_start}47`,
-                          "--game-glow-hover": `${game.gradient_start}66`,
-                          backgroundImage: `linear-gradient(155deg, ${game.gradient_start}, ${game.gradient_end})`,
+                          "--game-glow": `${gradientStart}47`,
+                          "--game-glow-hover": `${gradientStart}66`,
+                          backgroundImage: `linear-gradient(155deg, ${gradientStart}, ${gradientEnd})`,
                           animationDelay: `${index * 0.03}s`,
                         } as CSSProperties;
-                        const gameKey = String(game.id);
+                        const gameKey = game.game_code;
                         return (
-                          <button key={gameKey} type="button" className="game-tile" onClick={() => void onPlayGame(game)} disabled={playing}>
+                          <button key={gameKey} type="button" className="game-tile" onClick={() => onPlayGame(game)} disabled={playing}>
                             <div
                               className="game-art"
                               style={artStyle}
@@ -536,9 +569,7 @@ export default function App() {
                                 <span className="game-art-placeholder">{game.name}</span>
                               )}
                             </div>
-                            {game.players_online !== null ? (
-                              <span className="game-players"><i aria-hidden="true" /> {game.players_online.toLocaleString("en-US")} players</span>
-                            ) : null}
+                            <span className="game-provider-label">{TABLE_GAME_CODES.has(game.game_code) ? "ကတ်ဂိမ်း" : "Slot"}</span>
                           </button>
                         );
                       })}
@@ -556,6 +587,27 @@ export default function App() {
               </>
             )}
           </div>
+
+          {selectedGame && session ? (
+            <div className="game-stake-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !playing) setSelectedGame(null); }}>
+              <section className="game-stake-sheet" role="dialog" aria-modal="true" aria-labelledby="game-stake-title">
+                <button className="game-stake-close" type="button" onClick={() => { if (!playing) setSelectedGame(null); }} aria-label="Close">{Ic.close}</button>
+                <span className="game-stake-kicker">ကစားရန်</span>
+                <h2 id="game-stake-title">{selectedGame.name}</h2>
+                <p>လောင်းကြေးအဆင့် ရွေးပါ</p>
+                <div className="game-stake-options">
+                  {stakeOptions.map((option) => (
+                    <button key={option.id} type="button" disabled={playing} onClick={() => void onSelectStake(selectedGame, option.tableId)}>
+                      <span><strong>{option.name}</strong><small>MMK{option.minBet != null ? ` · အနည်းဆုံး ${Number(option.minBet).toLocaleString("en-US")} Ks` : ""}{option.maxBet != null ? ` · အများဆုံး ${Number(option.maxBet).toLocaleString("en-US")} Ks` : ""}</small></span>
+                      <b>{playing ? "ဖွင့်နေသည်…" : "ကစားမည် →"}</b>
+                    </button>
+                  ))}
+                  {!stakeOptions.length ? <div className="games-empty">ယခုအချိန်တွင် MMK လောင်းကြေးအဆင့် မရှိသေးပါ</div> : null}
+                </div>
+                {error ? <p className="error game-stake-error">{error}</p> : null}
+              </section>
+            </div>
+          ) : null}
 
           <nav className={`bottom-navigation${walletOpen ? " hidden" : ""}`}>
             {(

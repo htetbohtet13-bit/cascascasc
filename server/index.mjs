@@ -1,14 +1,13 @@
 import http from "node:http";
 import { currentSession } from "./auth.mjs";
-import { issueGameToken } from "./game.mjs";
 import { gameLoginFailure, handleGameLogin } from "./game-login.mjs";
 import { handleWalletProxy } from "./wallet-proxy.mjs";
-import { proxySlot } from "../api/_slot-proxy.js";
+import { handleSkmWallet } from "../api/_skm-wallet.js";
 import meHandler from "../api/me.js";
 import betsHandler from "../api/profile/bets.js";
 import authRequestHandler from "../api/auth/[...all].js";
 import { handleAdminApi } from "./admin-api.mjs";
-import { listActiveGames } from "./games.mjs";
+import { listProviderGames } from "./skm-api.mjs";
 
 const port = Number(process.env.SLOT_API_PORT ?? 8787);
 
@@ -31,13 +30,30 @@ async function readBody(req) {
   try { return JSON.parse(text); } catch { return {}; }
 }
 
+async function readRawBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  return Buffer.concat(chunks);
+}
+
 const server = http.createServer(async (req, rawRes) => {
   const res = adaptResponse(rawRes);
   const path = new URL(req.url ?? "/", "http://localhost").pathname;
 
   try {
-    if (req.method === "OPTIONS" && path.startsWith("/api/slot/")) {
-      return proxySlot(req, res, path === "/api/slot/balance" ? "balance" : "change");
+    const walletRoutes = {
+      "/balance": "balance",
+      "/debit": "debit",
+      "/credit": "credit",
+      "/rollback": "rollback",
+      "/api/provider-wallet/balance": "balance",
+      "/api/provider-wallet/debit": "debit",
+      "/api/provider-wallet/credit": "credit",
+      "/api/provider-wallet/rollback": "rollback",
+    };
+    if (walletRoutes[path]) {
+      const rawBody = req.method === "POST" ? await readRawBody(req) : Buffer.alloc(0);
+      return handleSkmWallet(req, res, walletRoutes[path], rawBody);
     }
     if (req.method === "OPTIONS") return res.status(204).end();
     if (req.method === "POST" || req.method === "PUT") req.body = await readBody(req);
@@ -46,18 +62,13 @@ const server = http.createServer(async (req, rawRes) => {
     if (path === "/api/profile/bets") return betsHandler(req, res);
     if (path === "/api/games") {
       if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
-      return res.status(200).json({ games: await listActiveGames() });
+      return res.status(200).json({ games: await listProviderGames() });
     }
     if (path === "/api/admin") {
       res.setHeader("Cache-Control", "private, no-store");
       const result = await handleAdminApi(req);
       for (const [name, value] of Object.entries(result.headers ?? {})) res.setHeader(name, value);
       return res.status(result.status).json(result.body);
-    }
-    if (path === "/api/game/session") {
-      const session = await currentSession(req);
-      if (!session?.user) return res.status(401).json({ error: "Not authenticated" });
-      return res.status(200).json(await issueGameToken(session.user.id));
     }
     if (path === "/api/game-login") {
       try {
@@ -75,9 +86,6 @@ const server = http.createServer(async (req, rawRes) => {
       if (!functionName) return res.status(404).json({ error: "Not found" });
       const result = await handleWalletProxy({ req, functionName, method: req.method, payload: req.body });
       return res.status(result.status).json(result.body);
-    }
-    if (path === "/api/slot/balance" || path === "/api/slot/change-balance") {
-      return proxySlot(req, res, path === "/api/slot/balance" ? "balance" : "change");
     }
     return res.status(404).json({ error: "Not found" });
   } catch (error) {

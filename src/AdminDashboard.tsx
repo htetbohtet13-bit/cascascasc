@@ -1,26 +1,29 @@
 import { useEffect, useState, type FormEvent } from "react";
 
 type Section = "overview" | "users" | "games" | "bets" | "deposits" | "withdrawals";
-type UserRow = { id: string; phone: string; balance: number | string; game_uid: string; created_at: string };
+type UserRow = { id: string; phone: string; balance: number | string; created_at: string };
 type BetRow = {
   bet_uid: string; round_id: string | null; bet: number | string; win: number | string;
   changemoney?: number | string; balance_after?: number | string; game_id?: number | null;
-  created_at: string; user_id: string; phone: string; game_uid?: string;
+  created_at: string; user_id: string; phone: string;
 };
 type WalletRow = {
-  order_id: string; user_id: string; phone: string; game_uid: string; service_type: string;
+  order_id: string; user_id: string; phone: string; service_type: string;
   amount: number | string; status: string; message: string | null; created_at: string;
   completed_at: string | null; provider_txn_id?: string | null; payout_phone?: string | null; reference?: string | null;
 };
 type Summary = Record<string, number | string>;
-type AdminGame = {
-  id: number | string; game_id: number; room_id: number; name: string; category: string;
-  image_url: string | null; gradient_start: string; gradient_end: string;
-  players_online: number | null; is_popular: boolean; is_active: boolean; sort_order: number;
+type ProviderPool = {
+  pool_id: string; name: string; currency: string;
+  limits?: { min_bet?: number; max_bet?: number };
+};
+type ProviderTable = { table_id: string; name: string; currency: string };
+type ProviderGame = {
+  game_code: string; name: string; pools?: ProviderPool[]; tables?: ProviderTable[];
 };
 type Payload = {
   summary?: Summary; latestBets?: BetRow[]; latestWithdrawals?: WalletRow[];
-  users?: UserRow[]; games?: AdminGame[]; bets?: BetRow[]; deposits?: WalletRow[]; withdrawals?: WalletRow[];
+  users?: UserRow[]; games?: ProviderGame[]; bets?: BetRow[]; deposits?: WalletRow[]; withdrawals?: WalletRow[];
   user?: UserRow; total?: number; page?: number; pageSize?: number;
 };
 type UserDetail = Payload & { user: UserRow; bets: BetRow[]; deposits: WalletRow[]; withdrawals: WalletRow[] };
@@ -28,7 +31,7 @@ type UserDetail = Payload & { user: UserRow; bets: BetRow[]; deposits: WalletRow
 const SECTIONS: { id: Section; label: string; mark: string }[] = [
   { id: "overview", label: "Overview", mark: "▦" },
   { id: "users", label: "Players", mark: "♙" },
-  { id: "games", label: "Games", mark: "▣" },
+  { id: "games", label: "Provider games", mark: "▣" },
   { id: "bets", label: "Bet history", mark: "♧" },
   { id: "deposits", label: "Deposits", mark: "＋" },
   { id: "withdrawals", label: "Withdrawals", mark: "↓" },
@@ -226,7 +229,7 @@ export default function AdminDashboard() {
               <div className="admin-user-balance"><small>Wallet balance</small><strong>{money(detail.user.balance)}</strong></div>
             </section>
             <div className="admin-detail-grid">
-              <div className="admin-detail-card"><small>Game account ID</small><strong>{detail.user.game_uid}</strong></div>
+              <div className="admin-detail-card"><small>Provider player ID</small><strong>{detail.user.id}</strong></div>
               <div className="admin-detail-card"><small>Joined</small><strong>{date(detail.user.created_at)}</strong></div>
               <div className="admin-detail-card"><small>Total bets shown</small><strong>{detail.bets?.length ?? 0}</strong></div>
             </div>
@@ -239,11 +242,11 @@ export default function AdminDashboard() {
         ) : section === "overview" ? (
           <Overview data={data} loading={loading} onOpen={changeSection} />
         ) : section === "games" ? (
-          <div className="admin-page-content"><GameManager games={(data as Payload).games ?? []} loading={loading} onRefresh={() => setRefreshKey((value) => value + 1)} /></div>
+          <div className="admin-page-content"><ProviderGames games={(data as Payload).games ?? []} loading={loading} /></div>
         ) : (
           <div className="admin-page-content">
             <div className="admin-list-toolbar">
-              <label className="admin-search"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder={section === "users" ? "Search phone, game ID, or player ID" : "Search player, round, or reference"} /></label>
+              <label className="admin-search"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder={section === "users" ? "Search phone or player ID" : "Search player, round, or reference"} /></label>
               {(section === "deposits" || section === "withdrawals") ? (
                 <select className="admin-filter" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} aria-label="Filter by status">
                   <option value="">All statuses</option>
@@ -293,99 +296,17 @@ function Overview({ data, loading, onOpen }: { data: Payload; loading: boolean; 
   );
 }
 
-const EMPTY_GAME: Omit<AdminGame, "id"> = {
-  game_id: 1, room_id: 1, name: "", category: "slots", image_url: "",
-  gradient_start: "#5c3918", gradient_end: "#d59612", players_online: null,
-  is_popular: false, is_active: true, sort_order: 0,
-};
-
-function GameManager({ games, loading, onRefresh }: { games: AdminGame[]; loading: boolean; onRefresh: () => void }) {
-  const [editing, setEditing] = useState<AdminGame | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-
-  async function saveGame(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const game = {
-      ...(editing ?? EMPTY_GAME),
-      name: String(form.get("name") ?? "").trim(),
-      game_id: Number(form.get("game_id")),
-      room_id: Number(form.get("room_id")),
-      category: String(form.get("category") ?? "slots"),
-      image_url: String(form.get("image_url") ?? "").trim(),
-      gradient_start: String(form.get("gradient_start") ?? "#5c3918"),
-      gradient_end: String(form.get("gradient_end") ?? "#d59612"),
-      players_online: String(form.get("players_online") ?? "") === "" ? null : Number(form.get("players_online")),
-      sort_order: Number(form.get("sort_order") ?? 0),
-      is_popular: form.get("is_popular") === "on",
-      is_active: form.get("is_active") === "on",
-    };
-    setSaving(true);
-    setMessage("");
-    try {
-      const response = await fetch("/api/admin", {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: editing ? "update_game" : "create_game", ...game }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Could not save game");
-      setEditing(null);
-      setCreating(false);
-      onRefresh();
-    } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Could not save game");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function deleteGame(game: AdminGame) {
-    if (!window.confirm(`Remove ${game.name} from the game list?`)) return;
-    setMessage("");
-    try {
-      const response = await fetch("/api/admin", {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete_game", id: game.id }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Could not remove game");
-      onRefresh();
-    } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Could not remove game");
-    }
-  }
-
-  const initial = editing ?? EMPTY_GAME;
+function ProviderGames({ games, loading }: { games: ProviderGame[]; loading: boolean }) {
   return (
     <>
-      <div className="admin-game-heading"><div><span>GAME CATALOG</span><h2>Manage games</h2><p>Add a game provider ID, its room, artwork, and display settings.</p></div><button className="admin-add-game" type="button" onClick={() => { setEditing(null); setCreating((value) => !value); setMessage(""); }}>{creating ? "Cancel" : "+ Add game"}</button></div>
-      {creating || editing ? (
-        <form key={editing ? `edit-${editing.id}` : "new-game"} className="admin-game-form" onSubmit={(event) => void saveGame(event)}>
-          <div className="admin-game-form-heading"><strong>{editing ? "Edit game" : "New game"}</strong><button type="button" onClick={() => { setEditing(null); setCreating(false); }}>Cancel</button></div>
-          <label>Game name<input name="name" defaultValue={initial.name} maxLength={80} required placeholder="Example: Charge Buffalo" /></label>
-          <div className="admin-game-form-grid">
-            <label>Game ID<input name="game_id" type="number" min="1" step="1" defaultValue={initial.game_id} required /></label>
-            <label>Room ID<input name="room_id" type="number" min="1" step="1" defaultValue={initial.room_id} required /></label>
-            <label>Category<select name="category" defaultValue={initial.category}><option value="slots">Slots</option><option value="cards">Cards</option><option value="buffalo">Buffalo</option><option value="other">Other</option></select></label>
-            <label>Sort order<input name="sort_order" type="number" step="1" defaultValue={initial.sort_order} /></label>
-          </div>
-          <label>Game image URL<input name="image_url" type="text" defaultValue={initial.image_url ?? ""} placeholder="https://… or /images/game.png" /></label>
-          <div className="admin-game-form-grid">
-            <label>Gradient start<input name="gradient_start" type="color" defaultValue={initial.gradient_start} /></label>
-            <label>Gradient end<input name="gradient_end" type="color" defaultValue={initial.gradient_end} /></label>
-            <label>Players online (optional)<input name="players_online" type="number" min="0" step="1" defaultValue={initial.players_online ?? ""} placeholder="Leave empty to hide" /></label>
-          </div>
-          <div className="admin-game-checks"><label><input name="is_popular" type="checkbox" defaultChecked={initial.is_popular} /> Show in Popular</label><label><input name="is_active" type="checkbox" defaultChecked={initial.is_active} /> Visible on site</label></div>
-          {message ? <p className="admin-game-error">{message}</p> : null}
-          <button className="admin-add-game" type="submit" disabled={saving}>{saving ? "Saving…" : editing ? "Save changes" : "Add game"}</button>
-        </form>
-      ) : null}
-      {message && !creating && !editing ? <p className="admin-game-error">{message}</p> : null}
-      <div className="admin-games-table-wrap"><table className="admin-table"><thead><tr><th>Game</th><th>Provider ID</th><th>Room</th><th>Category</th><th>Popular</th><th>Visibility</th><th /></tr></thead><tbody>
-        {games.map((game) => <tr key={game.id}><td><div className="admin-game-cell">{game.image_url ? <img src={game.image_url} alt="" /> : <span style={{ background: `linear-gradient(145deg, ${game.gradient_start}, ${game.gradient_end})` }}>{game.name.slice(0, 1)}</span>}<strong>{game.name}</strong></div></td><td>{game.game_id}</td><td>{game.room_id}</td><td>{game.category}</td><td>{game.is_popular ? "Yes" : "—"}</td><td><Status value={game.is_active ? "active" : "inactive"} /></td><td><div className="admin-game-actions"><button type="button" onClick={() => { setCreating(false); setEditing(game); setMessage(""); }}>Edit</button><button type="button" className="delete" onClick={() => void deleteGame(game)}>Remove</button></div></td></tr>)}
-        {!games.length ? <tr><td colSpan={7}><TableEmpty loading={loading} /></td></tr> : null}
+      <div className="admin-game-heading"><div><span>LIVE PROVIDER CATALOG</span><h2>Available games</h2><p>Synced from the provider. Game availability and stake levels come from its API.</p></div></div>
+      <div className="admin-games-table-wrap"><table className="admin-table"><thead><tr><th>Game</th><th>Game code</th><th>MMK pools</th><th>MMK tables</th><th>Stake levels</th></tr></thead><tbody>
+        {games.map((game) => {
+          const pools = (game.pools ?? []).filter((pool) => pool.currency === "MMK");
+          const tables = (game.tables ?? []).filter((table) => table.currency === "MMK");
+          return <tr key={game.game_code}><td><strong>{game.name}</strong></td><td>{game.game_code}</td><td>{pools.length}</td><td>{tables.length}</td><td>{pools.map((pool) => pool.name).join(", ") || "—"}</td></tr>;
+        })}
+        {!games.length ? <tr><td colSpan={5}><TableEmpty loading={loading} /></td></tr> : null}
       </tbody></table></div>
     </>
   );
@@ -393,7 +314,7 @@ function GameManager({ games, loading, onRefresh }: { games: AdminGame[]; loadin
 
 function UsersTable({ users, loading, onSelect }: { users: UserRow[]; loading: boolean; onSelect: (id: string) => void }) {
   if (!users.length) return <TableEmpty loading={loading} />;
-  return <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Player</th><th>Game ID</th><th>Balance</th><th>Joined</th><th /></tr></thead><tbody>{users.map((user) => <tr key={user.id} onClick={() => onSelect(user.id)}><td><strong>{user.phone}</strong><small>{user.id}</small></td><td>{user.game_uid}</td><td className="admin-number">{money(user.balance)}</td><td>{date(user.created_at)}</td><td><button type="button" className="admin-row-action">Details →</button></td></tr>)}</tbody></table></div>;
+  return <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Player</th><th>Player ID</th><th>Balance</th><th>Joined</th><th /></tr></thead><tbody>{users.map((user) => <tr key={user.id} onClick={() => onSelect(user.id)}><td><strong>{user.phone}</strong></td><td>{user.id}</td><td className="admin-number">{money(user.balance)}</td><td>{date(user.created_at)}</td><td><button type="button" className="admin-row-action">Details →</button></td></tr>)}</tbody></table></div>;
 }
 
 function BetsTable({ bets, loading, onSelect, compact = false }: { bets: BetRow[]; loading: boolean; onSelect: (id: string) => void; compact?: boolean }) {
