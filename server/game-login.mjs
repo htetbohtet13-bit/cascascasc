@@ -1,18 +1,11 @@
 import { createSkmGameSession } from "./skm-wallet.mjs";
 import { callSkmApi, listProviderGames, SkmApiError } from "./skm-api.mjs";
 
-const DEFAULT_LOBBY_URL = "https://www.j777ml.com";
+const LOBBY_URL = "https://www.j777ml.com/";
 const CURRENCY = "MMK";
 
 function configuredLobbyUrl() {
-  const value = String(process.env.LOBBY_URL ?? DEFAULT_LOBBY_URL).trim();
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== "https:") throw new Error("Lobby URL must use HTTPS");
-    return parsed.toString().replace(/\/$/, "");
-  } catch {
-    throw new Error("LOBBY_URL must be a valid HTTPS URL");
-  }
+  return LOBBY_URL;
 }
 
 export function gameLoginFailure(error) {
