@@ -8,6 +8,6 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error("Game catalog lookup failed", error);
     const status = Number.isInteger(error?.status) ? error.status : 502;
-    return res.status(status).json({ error: status === 503 ? "Provider API settings are missing" : "Could not load games" });
+    return res.status(status).json({ error: status === 503 ? "Game provider or gateway settings are missing" : "Could not load games" });
   }
 }

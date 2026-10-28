@@ -18,7 +18,7 @@ function configuredLobbyUrl() {
 export function gameLoginFailure(error) {
   if (error instanceof SkmApiError) {
     if (error.code === "CONFIG_MISSING" || error.code === "CONFIG_INVALID") {
-      return { status: 503, body: { error: "New game provider settings are missing or invalid" } };
+      return { status: 503, body: { error: "Game provider or VPS gateway settings are missing or invalid" } };
     }
     if (error.status === 404) return { status: 404, body: { error: "This game or stake is not available" } };
     if (error.status >= 500 || error.status === 429) {

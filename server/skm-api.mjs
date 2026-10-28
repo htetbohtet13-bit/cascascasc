@@ -13,19 +13,26 @@ export function skmConfig() {
   const apiBaseUrl = String(process.env.gameapibaseurl ?? "").trim().replace(/\/+$/, "");
   const operatorCode = String(process.env.operatorcode ?? "").trim();
   const secret = String(process.env.gameproviderkey ?? "").trim();
-  if (!apiBaseUrl || !operatorCode || !secret) {
-    throw new SkmApiError("Provider API settings are missing", { status: 503, code: "CONFIG_MISSING" });
+  const gatewayUrl = String(process.env.GATEWAY_URL ?? "").trim();
+  const gatewaySecret = String(process.env.GATEWAY_SECRET ?? "").trim();
+  if (!apiBaseUrl || !operatorCode || !secret || !gatewayUrl || !gatewaySecret) {
+    throw new SkmApiError("Provider or gateway settings are missing", { status: 503, code: "CONFIG_MISSING" });
   }
   let parsed;
+  let parsedGateway;
   try {
     parsed = new URL(apiBaseUrl);
+    parsedGateway = new URL(gatewayUrl);
   } catch {
-    throw new SkmApiError("Provider API base URL is invalid", { status: 503, code: "CONFIG_INVALID" });
+    throw new SkmApiError("Provider or gateway URL is invalid", { status: 503, code: "CONFIG_INVALID" });
   }
   if (parsed.protocol !== "https:") {
     throw new SkmApiError("Provider API base URL must use HTTPS", { status: 503, code: "CONFIG_INVALID" });
   }
-  return { apiBaseUrl, operatorCode, secret };
+  if (parsedGateway.protocol !== "https:" && parsedGateway.protocol !== "http:") {
+    throw new SkmApiError("Gateway URL must use HTTP or HTTPS", { status: 503, code: "CONFIG_INVALID" });
+  }
+  return { apiBaseUrl, operatorCode, secret, gatewayUrl, gatewaySecret };
 }
 
 function signature(secret, timestamp, rawBody) {
@@ -71,19 +78,29 @@ export function signedSkmResponse(body) {
 }
 
 export async function callSkmApi(path, { method = "GET", payload } = {}) {
-  const { apiBaseUrl, operatorCode, secret } = skmConfig();
+  const { apiBaseUrl, operatorCode, secret, gatewayUrl, gatewaySecret } = skmConfig();
   const rawBody = method === "GET" ? Buffer.alloc(0) : Buffer.from(JSON.stringify(payload ?? {}), "utf8");
   const timestamp = String(Math.floor(Date.now() / 1000));
   const url = `${apiBaseUrl}/${String(path).replace(/^\/+/, "")}`;
-  const response = await fetch(url, {
-    method,
+  const providerHeaders = {
+    "X-Operator-Code": operatorCode,
+    "X-Timestamp": timestamp,
+    "X-Signature": signature(secret, timestamp, rawBody),
+    ...(method === "GET" ? {} : { "Content-Type": "application/json" }),
+  };
+  const response = await fetch(gatewayUrl, {
+    method: "POST",
     headers: {
-      "X-Operator-Code": operatorCode,
-      "X-Timestamp": timestamp,
-      "X-Signature": signature(secret, timestamp, rawBody),
-      ...(method === "GET" ? {} : { "Content-Type": "application/json" }),
+      "Content-Type": "application/json",
+      "X-Gateway-Secret": gatewaySecret,
     },
-    ...(method === "GET" ? {} : { body: rawBody }),
+    body: JSON.stringify({
+      targetUrl: url,
+      method,
+      headers: providerHeaders,
+      body: method === "GET" ? null : payload ?? {},
+      rawBody: rawBody.toString("utf8"),
+    }),
     signal: AbortSignal.timeout(15_000),
   });
   const text = await response.text();
@@ -91,7 +108,9 @@ export async function callSkmApi(path, { method = "GET", payload } = {}) {
   try { data = text ? JSON.parse(text) : {}; } catch { /* preserve a safe generic provider error */ }
   if (!response.ok) {
     const code = String(data?.error ?? "PROVIDER_ERROR");
-    const message = typeof data?.message === "string" ? data.message : "The game provider rejected the request";
+    const message = typeof data?.message === "string"
+      ? data.message
+      : typeof data?.error === "string" ? data.error : "The game provider rejected the request";
     throw new SkmApiError(message, { status: response.status, code });
   }
   return data;
