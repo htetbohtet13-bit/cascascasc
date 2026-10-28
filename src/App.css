@@ -3788,6 +3788,12 @@
 .admin-game-actions { display: flex; gap: 8px; }
 .admin-game-actions button { border: 0; background: transparent; color: #8c6413; font-size: 9px; font-weight: 800; cursor: pointer; }
 .admin-game-actions button.delete { color: #a24e3b; }
+.admin-game-visibility { display: inline-flex; min-width: 76px; align-items: center; justify-content: center; gap: 6px; padding: 6px 9px; border: 1px solid transparent; border-radius: 999px; font-size: 9px; font-weight: 800; cursor: pointer; transition: background 140ms ease, border-color 140ms ease, transform 140ms ease; }
+.admin-game-visibility.visible { border-color: #b8dfc5; background: #eaf7ee; color: #176a3a; }
+.admin-game-visibility.hidden { border-color: #edc4c0; background: #fff0ee; color: #a32d25; }
+.admin-game-visibility i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
+.admin-game-visibility:hover:not(:disabled) { transform: translateY(-1px); }
+.admin-game-visibility:disabled { cursor: wait; opacity: .65; }
 
 /* Game catalog sizing, card effects, and category chips from the game-list guide. */
 .chips {

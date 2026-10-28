@@ -302,6 +302,52 @@ function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games:
   const [draft, setDraft] = useState({ image_url: "", players_online: "", sort_order: "", is_active: true });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [visibilitySavingCode, setVisibilitySavingCode] = useState("");
+  const [visibilityOverrides, setVisibilityOverrides] = useState<Record<string, boolean>>({});
+  const [visibilityError, setVisibilityError] = useState("");
+
+  useEffect(() => {
+    setVisibilityOverrides((current) => {
+      const next = { ...current };
+      for (const [code, visible] of Object.entries(current)) {
+        const game = games.find((item) => item.game_code === code);
+        if (game && (game.is_active !== false) === visible) delete next[code];
+      }
+      return next;
+    });
+  }, [games]);
+
+  function isVisible(game: ProviderGame) {
+    return visibilityOverrides[game.game_code] ?? game.is_active !== false;
+  }
+
+  async function toggleVisibility(game: ProviderGame) {
+    const wasVisible = isVisible(game);
+    const nextVisible = !wasVisible;
+    setVisibilityOverrides((current) => ({ ...current, [game.game_code]: nextVisible }));
+    setVisibilitySavingCode(game.game_code);
+    setVisibilityError("");
+    try {
+      const response = await fetch("/api/admin", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "set_game_visibility",
+          game_code: game.game_code,
+          is_active: nextVisible,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Could not update game visibility");
+      onSaved();
+    } catch (reason) {
+      setVisibilityOverrides((current) => ({ ...current, [game.game_code]: wasVisible }));
+      setVisibilityError(reason instanceof Error ? reason.message : "Could not update game visibility");
+    } finally {
+      setVisibilitySavingCode("");
+    }
+  }
 
   function edit(game: ProviderGame) {
     setEditingCode(game.game_code);
@@ -310,7 +356,7 @@ function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games:
       image_url: game.image_url ?? "",
       players_online: game.players_online == null ? "" : String(game.players_online),
       sort_order: String(game.sort_order ?? 0),
-      is_active: game.is_active !== false,
+      is_active: isVisible(game),
     });
   }
 
@@ -347,6 +393,7 @@ function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games:
     <>
       <div className="admin-game-heading"><div><span>LIVE PROVIDER CATALOG</span><h2>Manage games</h2><p>Edit artwork, player count, visibility, and order. Provider availability and stake levels stay synced.</p></div></div>
       {!settingsConfigured ? <div className="admin-error">Run <code>neon/006_game_display_settings.sql</code> in the Neon SQL Editor to enable game editing.</div> : null}
+      {visibilityError ? <div className="admin-error" role="alert">{visibilityError}</div> : null}
       <div className="admin-games-table-wrap"><table className="admin-table"><thead><tr><th>Game</th><th>Game code</th><th>MMK pools</th><th>MMK tables</th><th>Active players</th><th>Order</th><th>Visible</th><th /></tr></thead><tbody>
         {games.map((game) => {
           const pools = (game.pools ?? []).filter((pool) => pool.currency === "MMK");
@@ -356,7 +403,14 @@ function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games:
               <td><div className="admin-game-cell">{game.image_url ? <img src={game.image_url} alt="" /> : <span>{game.name.slice(0, 1)}</span>}<strong>{game.name}</strong></div></td>
               <td>{game.game_code}</td><td>{pools.length}</td><td>{tables.length}</td>
               <td>{game.players_online == null ? "—" : Number(game.players_online).toLocaleString()}</td>
-              <td>{game.sort_order ?? "—"}</td><td>{game.is_active === false ? "Hidden" : "Shown"}</td>
+              <td>{game.sort_order ?? "—"}</td><td><button
+                type="button"
+                className={`admin-game-visibility ${isVisible(game) ? "visible" : "hidden"}`}
+                onClick={() => void toggleVisibility(game)}
+                disabled={!settingsConfigured || visibilitySavingCode !== ""}
+                aria-pressed={isVisible(game)}
+                title={isVisible(game) ? "Click to hide this game" : "Click to show this game"}
+              ><i aria-hidden="true" />{visibilitySavingCode === game.game_code ? "Saving…" : isVisible(game) ? "Visible" : "Hidden"}</button></td>
               <td><div className="admin-game-actions"><button type="button" onClick={() => edit(game)}>Edit</button></div></td>
             </tr>
             {editingCode === game.game_code ? (

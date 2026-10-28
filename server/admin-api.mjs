@@ -107,6 +107,33 @@ async function saveGameSettings(body) {
   return { status: 200, body: { ok: true, game_code: gameCode } };
 }
 
+async function setGameVisibility(body) {
+  const gameCode = typeof body?.game_code === "string" ? body.game_code.trim() : "";
+  if (!/^[a-z0-9]{1,80}$/.test(gameCode)) {
+    return { status: 400, body: { error: "Invalid provider game code" } };
+  }
+  if (typeof body?.is_active !== "boolean") {
+    return { status: 400, body: { error: "Choose whether this game is visible" } };
+  }
+
+  try {
+    await getPool().query(
+      `insert into public.game_display_settings (game_code, is_active, updated_at)
+       values ($1, $2, now())
+       on conflict (game_code) do update set
+         is_active = excluded.is_active,
+         updated_at = now()`,
+      [gameCode, body.is_active],
+    );
+  } catch (error) {
+    if (error?.code === "42P01") {
+      return { status: 503, body: { error: "Run neon/006_game_display_settings.sql in the Neon SQL Editor first" } };
+    }
+    throw error;
+  }
+  return { status: 200, body: { ok: true, game_code: gameCode, is_active: body.is_active } };
+}
+
 function sameOrigin(req) {
   const origin = req.headers?.origin;
   const host = req.headers?.host;
@@ -273,6 +300,7 @@ export async function handleAdminApi(req) {
     }
     if (!validAdminSession(req, secret)) return { status: 401, body: { error: "Enter the admin password to continue" } };
     if (action === "save_game_settings") return await saveGameSettings(req.body);
+    if (action === "set_game_visibility") return await setGameVisibility(req.body);
     return { status: 400, body: { error: "Unknown admin action" } };
   }
   if (req.method !== "GET") return { status: 405, body: { error: "Method not allowed" } };
