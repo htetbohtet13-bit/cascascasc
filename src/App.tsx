@@ -6,7 +6,7 @@ import AdminDashboard from "./AdminDashboard";
 
 type Mode = "signin" | "signup";
 type NavTab = "cashier" | "games" | "bonuses" | "profile";
-type GameFilter = "all" | "cards" | "slots";
+type GameFilter = "popular" | "cards" | "slots" | "buffalo" | "all";
 
 type Profile = {
   phone: string;
@@ -27,6 +27,14 @@ type GameLaunchOption = {
 const TABLE_GAME_CODES = new Set([
   "shankoemee", "bugyee", "abcd", "dragontiger", "myanmarpoker13card", "shankoemee3d",
 ]);
+
+const GAME_CATEGORIES: ReadonlyArray<{ id: GameFilter; label: string; icon: string }> = [
+  { id: "popular", label: "နာမည်ကြီး", icon: "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/smt223_hot.png" },
+  { id: "cards", label: "ဖဲဂိမ်း", icon: "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/pok3.webp" },
+  { id: "slots", label: "စလော့ဂိမ်း", icon: "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/smt223_slot.png" },
+  { id: "buffalo", label: "ကျွဲဂိမ်း", icon: "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/smt223_buffalo2.webp" },
+  { id: "all", label: "အားလုံး", icon: "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/smt223_arcade.png" },
+];
 
 const GAME_PALETTES: ReadonlyArray<readonly [string, string]> = [
   ["#31200f", "#a87320"], ["#102e2b", "#168c76"], ["#30151a", "#ae3f32"],
@@ -149,7 +157,7 @@ export default function App() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [walletMode, setWalletMode] = useState<"deposit" | "withdraw">("deposit");
   const [navTab, setNavTab] = useState<NavTab>("games");
-  const [gameFilter, setGameFilter] = useState<GameFilter>("all");
+  const [gameFilter, setGameFilter] = useState<GameFilter>("popular");
   const [bannerIdx, setBannerIdx] = useState(0);
   const [bannerFailed, setBannerFailed] = useState<Record<number, boolean>>({});
   const [scrolled, setScrolled] = useState(false);
@@ -391,17 +399,22 @@ export default function App() {
     session?.user.name ??
     "—";
   const balance = profile?.balance ?? 0;
-  const visibleGames = games.filter((game) => {
-    if (gameFilter === "all") return true;
-    const isTableGame = TABLE_GAME_CODES.has(game.game_code);
-    return gameFilter === "cards" ? isTableGame : !isTableGame;
-  });
-  const sectionTitle =
-    gameFilter === "all"
-      ? "အားလုံးဂိမ်းများ"
-      : gameFilter === "cards"
-        ? "ကတ်ဂိမ်းများ"
-        : "Slot ဂိမ်းများ";
+  const visibleGames = games
+    .filter((game) => {
+      const isTableGame = TABLE_GAME_CODES.has(game.game_code.toLowerCase());
+      const isBuffalo = game.game_code.toLowerCase().includes("buffalo") || game.name.toLowerCase().includes("buffalo");
+      if (gameFilter === "cards") return isTableGame;
+      if (gameFilter === "slots") return !isTableGame && !isBuffalo;
+      if (gameFilter === "buffalo") return isBuffalo;
+      return true;
+    })
+    .sort((a, b) => {
+      if (gameFilter === "popular") {
+        return (b.players_online ?? 0) - (a.players_online ?? 0) || (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      }
+      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    });
+  const sectionTitle = GAME_CATEGORIES.find((category) => category.id === gameFilter)?.label ?? "အားလုံး";
   const bannerSrc = bannerFailed[bannerIdx] ? "/images/JL-banner.jpg" : BANNERS[bannerIdx];
   const stakeOptions = selectedGame ? gameLaunchOptions(selectedGame) : [];
 
@@ -534,20 +547,16 @@ export default function App() {
                 </div>
 
                 <div className="chips">
-                  {(
-                    [
-                      ["all", "အားလုံး"],
-                      ["cards", "ကတ်ဂိမ်း"],
-                      ["slots", "Slot ဂိမ်း"],
-                    ] as const
-                  ).map(([id, label]) => (
+                  {GAME_CATEGORIES.map(({ id, label, icon }) => (
                     <button
                       key={id}
                       type="button"
                       className={`chip${gameFilter === id ? " active" : ""}`}
+                      aria-pressed={gameFilter === id}
                       onClick={() => setGameFilter(id)}
                     >
-                      {label}
+                      <img src={icon} alt="" aria-hidden="true" />
+                      <span>{label}</span>
                     </button>
                   ))}
                 </div>

@@ -3797,22 +3797,48 @@
 .admin-game-actions button.delete { color: #a24e3b; }
 
 /* Game catalog sizing, card effects, and category chips from the game-list guide. */
-.chips { gap: 8px; padding: 14px 16px 0; }
+.chips {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+  padding: 12px 10px 0;
+  overflow: hidden;
+}
 .chip {
-  padding: 8px 14px;
+  display: flex;
+  min-width: 0;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 7px 2px;
   border: 1px solid var(--ui-line);
-  border-radius: 999px;
+  border-radius: 10px;
   background: var(--ui-surface-soft);
   color: var(--ui-ink);
-  font-size: 12px;
+  font-size: clamp(7px, 2.1vw, 9px);
   font-weight: 700;
+  white-space: nowrap;
   transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
+.chip img {
+  display: block;
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+  object-fit: contain;
+}
+.chip span { min-width: 0; }
 .chip.active {
   border-color: #d99b20;
   background: var(--ui-gold-gradient);
   color: var(--ui-gold-ink);
   box-shadow: 0 3px 8px rgba(176, 117, 10, 0.18);
+}
+@media (max-width: 380px) {
+  .chips { gap: 4px; padding-right: 8px; padding-left: 8px; }
+  .chip { flex-direction: column; gap: 2px; padding: 5px 1px; font-size: 8px; }
+  .chip img { width: 17px; height: 17px; flex-basis: 17px; }
 }
 .games-section { margin-top: 16px; padding: 0 16px 8px; }
 .games-title { margin: 0 0 14px; font-size: 15px; font-weight: 700; }
