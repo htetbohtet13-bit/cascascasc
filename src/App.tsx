@@ -21,6 +21,7 @@ type GameLaunchOption = {
   name: string;
   minBet?: number;
   maxBet?: number;
+  tierIndex: number;
 };
 
 const TABLE_GAME_CODES = new Set([
@@ -30,6 +31,15 @@ const TABLE_GAME_CODES = new Set([
 const GAME_PALETTES: ReadonlyArray<readonly [string, string]> = [
   ["#31200f", "#a87320"], ["#102e2b", "#168c76"], ["#30151a", "#ae3f32"],
   ["#1a2441", "#4b69a7"], ["#292014", "#8e7129"], ["#25182d", "#7950a2"],
+];
+
+const POOL_TIER_IMAGES = [
+  "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/%E1%80%9C%E1%80%B0%E1%80%9E%E1%80%85%E1%80%BA.png",
+  "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/%E1%80%82%E1%80%BB%E1%80%B0%E1%80%94%E1%80%AE%E1%80%9A%E1%80%AC.png",
+  "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/%E1%80%85%E1%80%AE%E1%80%94%E1%80%AE%E1%80%9A%E1%80%AC.png",
+  "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/%E1%80%98%E1%80%B1%E1%80%AC%E1%80%B7%E1%80%85%E1%80%BA.png",
+  "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/%E1%80%99%E1%80%AE%E1%80%9C%E1%80%AE%E1%80%9A%E1%80%B6%E1%80%94%E1%80%AC.png",
+  "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/%E1%80%98%E1%80%AE%E1%80%9C%E1%80%AE%E1%80%9A%E1%80%B6%E1%80%94%E1%80%AC.png",
 ];
 
 function gamePalette(code: string): readonly [string, string] {
@@ -56,7 +66,9 @@ function gameLaunchOptions(game: Game): GameLaunchOption[] {
       minBet: table.limits?.min_bet,
       maxBet: table.limits?.max_bet,
     }));
-  return [...pools, ...tables];
+  return [...pools, ...tables]
+    .sort((a, b) => (a.minBet ?? Number.MAX_SAFE_INTEGER) - (b.minBet ?? Number.MAX_SAFE_INTEGER))
+    .map((option, tierIndex) => ({ ...option, tierIndex }));
 }
 
 const BANNERS = [
@@ -133,6 +145,7 @@ export default function App() {
   const [games, setGames] = useState<Game[]>([]);
   const [gamesLoading, setGamesLoading] = useState(true);
   const [failedGameImages, setFailedGameImages] = useState<Record<string, boolean>>({});
+  const [failedPoolTierImages, setFailedPoolTierImages] = useState<Record<number, boolean>>({});
   const [walletOpen, setWalletOpen] = useState(false);
   const [walletMode, setWalletMode] = useState<"deposit" | "withdraw">("deposit");
   const [navTab, setNavTab] = useState<NavTab>("games");
@@ -601,13 +614,28 @@ export default function App() {
                 <span className="game-stake-kicker">ကစားရန်</span>
                 <h2 id="game-stake-title">{selectedGame.name}</h2>
                 <p>လောင်းကြေးအဆင့် ရွေးပါ</p>
-                <div className="game-stake-options">
-                  {stakeOptions.map((option) => (
-                    <button key={option.id} type="button" disabled={playing} onClick={() => void onSelectStake(selectedGame, option.tableId)}>
-                      <span><strong>{option.name}</strong><small>MMK{option.minBet != null ? ` · အနည်းဆုံး ${Number(option.minBet).toLocaleString("en-US")} Ks` : ""}{option.maxBet != null ? ` · အများဆုံး ${Number(option.maxBet).toLocaleString("en-US")} Ks` : ""}</small></span>
-                      <b>{playing ? "ဖွင့်နေသည်…" : "ကစားမည် →"}</b>
-                    </button>
-                  ))}
+                <div className={`game-stake-options${stakeOptions.length > 1 ? " pool-tier-grid" : ""}`}>
+                  {stakeOptions.map((option) => {
+                    const tierImage = POOL_TIER_IMAGES[option.tierIndex];
+                    const showTierImage = Boolean(tierImage && !failedPoolTierImages[option.tierIndex]);
+                    const amount = option.minBet != null ? `${Number(option.minBet).toLocaleString("en-US")} Ks` : "MMK";
+                    const range = option.maxBet != null
+                      ? `${amount} – ${Number(option.maxBet).toLocaleString("en-US")} Ks`
+                      : amount;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={showTierImage ? "pool-tier-card" : "pool-tier-card pool-tier-fallback"}
+                        aria-label={`${option.name}, ${range}`}
+                        title={`${option.name} · ${range}`}
+                        disabled={playing}
+                        onClick={() => void onSelectStake(selectedGame, option.tableId)}
+                      >
+                        {showTierImage ? <img src={tierImage} alt="" aria-hidden="true" onError={() => setFailedPoolTierImages((current) => ({ ...current, [option.tierIndex]: true }))} /> : <span className="pool-tier-fallback-copy"><strong>{option.name}</strong><small>{range}</small></span>}
+                      </button>
+                    );
+                  })}
                   {!stakeOptions.length ? <div className="games-empty">ယခုအချိန်တွင် MMK လောင်းကြေးအဆင့် မရှိသေးပါ</div> : null}
                 </div>
                 {error ? <p className="error game-stake-error">{error}</p> : null}
