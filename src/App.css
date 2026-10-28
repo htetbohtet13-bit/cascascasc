@@ -3831,8 +3831,15 @@
   .chip { flex-direction: column; gap: 2px; padding: 5px 1px; font-size: 8px; }
   .chip img { width: 17px; height: 17px; flex-basis: 17px; }
 }
-.games-section { margin-top: 16px; padding: 0 16px 8px; }
-.games-title { margin: 0 0 14px; font-size: 15px; font-weight: 700; }
+.games-section { margin-top: 10px; padding: 0 16px 8px; }
+.games-title {
+  margin: 0 0 7px;
+  padding-left: 8px;
+  border-left: 3px solid var(--ui-gold);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
 .games-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 10px; row-gap: 6px; }
 .game-tile { min-width: 0; gap: 3px; animation: fadeSlideUp .5s cubic-bezier(.23, 1, .32, 1) both; }
 .game-tile:disabled { cursor: wait; opacity: .72; }
