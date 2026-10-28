@@ -1,7 +1,7 @@
 import { createSkmGameSession } from "./skm-wallet.mjs";
 import { callSkmApi, listProviderGames, SkmApiError } from "./skm-api.mjs";
 
-const DEFAULT_LOBBY_URL = "https://j777ml.com";
+const DEFAULT_LOBBY_URL = "https://www.j777ml.com";
 const CURRENCY = "MMK";
 
 function configuredLobbyUrl() {
