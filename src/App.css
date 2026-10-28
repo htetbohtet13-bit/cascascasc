@@ -3003,16 +3003,16 @@
 
 .balance-coin {
   display: block;
-  width: 21px;
-  height: 21px;
-  flex: 0 0 21px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
   filter: drop-shadow(0 1px 2px rgba(126, 75, 0, 0.25));
   animation: balance-coin-spin 10s linear infinite;
   transform-origin: center;
 }
 
 @keyframes balance-coin-spin {
-  to { transform: rotate(360deg); }
+  to { transform: perspective(240px) rotateY(360deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3051,9 +3051,9 @@
   }
 
   .balance-coin {
-    width: 18px;
-    height: 18px;
-    flex-basis: 18px;
+    width: 23px;
+    height: 23px;
+    flex-basis: 23px;
   }
 
   .topup-chip,
