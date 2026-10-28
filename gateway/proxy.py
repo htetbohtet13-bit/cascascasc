@@ -75,7 +75,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
             return self.send_json(400, {"error": "Missing proxy request fields"})
 
         target = urlsplit(raw_url)
-        allowed_host = os.environ.get("PROVIDER_API_HOST", "skm.african-buffalo.net").strip().lower()
+        allowed_host = os.environ.get("PROVIDER_API_HOST", "shan-24.chapm382.com").strip().lower()
         if (
             target.scheme != "https"
             or target.hostname is None
