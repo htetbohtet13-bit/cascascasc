@@ -80,9 +80,8 @@ function gameLaunchOptions(game: Game): GameLaunchOption[] {
 }
 
 const BANNERS = [
-  "https://9blqhfvaufeml8ge.public.blob.vercel-storage.com/banners/ChatGPT%20Image%20Jul%2029%2C%202026%2C%2008_27_15%20PM.webp",
-  "https://9blqhfvaufeml8ge.public.blob.vercel-storage.com/banners/ChatGPT%20Image%20Jul%2029%2C%202026%2C%2009_08_27%20PM.webp",
-  "/images/JL-banner.jpg",
+  "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/smt223_banner2.webp",
+  "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/smt223_banner1.webp",
 ];
 
 const Ic = {
@@ -415,7 +414,7 @@ export default function App() {
       return (a.sort_order ?? 0) - (b.sort_order ?? 0);
     });
   const sectionTitle = GAME_CATEGORIES.find((category) => category.id === gameFilter)?.label ?? "အားလုံး";
-  const bannerSrc = bannerFailed[bannerIdx] ? "/images/JL-banner.jpg" : BANNERS[bannerIdx];
+  const bannerSrc = bannerFailed[bannerIdx] ? BANNERS[(bannerIdx + 1) % BANNERS.length] : BANNERS[bannerIdx];
   const stakeOptions = selectedGame ? gameLaunchOptions(selectedGame) : [];
 
   if (isAdminRoute) return <AdminDashboard />;
