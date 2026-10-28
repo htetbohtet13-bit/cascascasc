@@ -597,7 +597,7 @@ export default function App() {
                                 <span className="game-art-placeholder">{game.name}</span>
                               )}
                             </div>
-                            {game.players_online != null ? <span className="game-players"><i />{Number(game.players_online).toLocaleString("en-US")} players</span> : null}
+                            {game.players_online != null ? <span className="game-players"><i />{Number(game.players_online).toLocaleString("en-US")}ယောက်</span> : null}
                           </button>
                         );
                       })}
