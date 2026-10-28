@@ -100,7 +100,11 @@ class GatewayHandler(BaseHTTPRequestHandler):
             except (json.JSONDecodeError, UnicodeDecodeError):
                 return self.send_json(400, {"error": "Upstream body must be JSON"})
 
-        forwarded = {}
+        # Identify this as a server-side API client instead of urllib's generic default UA.
+        forwarded = {
+            "User-Agent": "J777-Operator-Gateway/1.0",
+            "Accept": "application/json",
+        }
         for incoming_name, outgoing_name in FORWARDED_HEADERS.items():
             value = headers.get(incoming_name) or headers.get(outgoing_name)
             if isinstance(value, str) and "\r" not in value and "\n" not in value:
