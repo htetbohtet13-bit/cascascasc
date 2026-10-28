@@ -33,13 +33,17 @@ export function wageringMessage(remaining) {
 }
 
 // Callers hold the player's profile lock throughout this tracker's operations.
-// The migration activates tracking; older deployments keep working before it runs.
+// Missing protection must stop money movement instead of silently waiving turnover.
 export async function wageringTracker(client, userId) {
   const ready = await client.query("select to_regclass('public.wallet_wagering_events') is not null as enabled");
   const enabled = ready.rows[0]?.enabled === true;
+  if (!enabled) {
+    const error = new Error("Wagering security storage is unavailable");
+    error.code = "WAGERING_STORAGE_UNAVAILABLE";
+    throw error;
+  }
 
   async function record(kind, amount, sourceId, state = "SETTLED") {
-    if (!enabled) return;
     await client.query(
       `insert into public.wallet_wagering_events (user_id, kind, amount, source_id, state)
        values ($1::uuid, $2, $3, $4, $5)
@@ -49,7 +53,6 @@ export async function wageringTracker(client, userId) {
   }
 
   async function closeBet(debitId, state) {
-    if (!enabled) return;
     await client.query(
       `update public.wallet_wagering_events set state = $3
         where user_id = $1::uuid and kind = 'BET' and source_id = $2 and state = 'PENDING'`,
@@ -58,7 +61,7 @@ export async function wageringTracker(client, userId) {
   }
 
   async function resetIfEmpty(balance, sourceId) {
-    if (!enabled || BigInt(balance) !== 0n) return;
+    if (BigInt(balance) !== 0n) return;
     const outstanding = await client.query(
       `select
          exists (select 1 from public.skm_wallet_transactions
@@ -72,7 +75,6 @@ export async function wageringTracker(client, userId) {
   }
 
   async function remaining() {
-    if (!enabled) return 0n;
     const result = await client.query(
       `select kind, amount, state from public.wallet_wagering_events
         where user_id = $1::uuid

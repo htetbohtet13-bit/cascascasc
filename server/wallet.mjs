@@ -2,6 +2,7 @@ import { getPool, withTransaction } from "./neon.mjs";
 import { paymentConfig } from "./payment-env.mjs";
 import { wageringMessage, wageringTracker } from "./wagering.mjs";
 import { addMoney, money, moneyNumber, positiveMoney, subtractMoney } from "./money.mjs";
+import { payoutPolicy, payoutBlocked, checkPayoutLimits } from "./payout-security.mjs";
 
 // Use one lock order across deposits, reservations, refunds and completions.
 async function lockedProfile(client, userId) {
@@ -96,6 +97,8 @@ async function currentBalance(client, userId) {
 
 export async function reserveWithdraw({ userId, orderId, serviceType, amount, phone }) {
   positiveMoney(amount);
+  const policy = payoutPolicy();
+  if (!policy.enabled) return payoutBlocked("WITHDRAWALS_PAUSED");
   return withTransaction(async (client) => {
     const profile = await lockedProfile(client, userId);
     if (!profile.rowCount) return { ok: false, message: "Profile not found" };
@@ -137,6 +140,9 @@ export async function reserveWithdraw({ userId, orderId, serviceType, amount, ph
 
     const availableBalance = money(profile.rows[0].balance);
     if (availableBalance < money(amount)) return { ok: false, message: "Not enough balance" };
+
+    const limited = await checkPayoutLimits(client, policy, userId, amount);
+    if (limited) return limited;
 
     const wagering = await wageringTracker(client, userId);
     const remaining = await wagering.remaining();

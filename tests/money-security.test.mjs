@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { after, before, beforeEach, mock, test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
+import { Readable } from "node:stream";
 import { MAX_MONEY, addMoney, money, subtractMoney } from "../server/money.mjs";
 import { signedSkmResponse, verifySkmRequest } from "../server/skm-api.mjs";
 
@@ -12,9 +13,13 @@ let activeUserId;
 let limitError = null;
 let phoneSequence = 100000000;
 let queryLog = [];
+let queryFault;
+const payoutKeys = ["WITHDRAWALS_ENABLED", "WITHDRAW_MAX_AMOUNT_MMK", "WITHDRAW_MAX_PER_DAY"];
+const savedPayoutEnv = Object.fromEntries(payoutKeys.map((key) => [key, process.env[key]]));
 function clientFor(connection) {
   return { async query(sql, params) {
     queryLog.push(sql);
+    if (queryFault) queryFault(sql);
     const result = await connection.query(sql, params);
     return { rows: result.rows, rowCount: /^\s*select/i.test(sql) ? result.rows.length : result.affectedRows };
   } };
@@ -22,11 +27,13 @@ function clientFor(connection) {
 mock.module("../server/neon.mjs", { namedExports: {
   getPool: () => clientFor(db), withTransaction: (fn) => db.transaction((tx) => fn(clientFor(tx))),
 } });
-mock.module("../server/auth.mjs", { namedExports: { currentSession: async () => ({ user: { id: activeUserId } }) } });
+mock.module("../server/auth.mjs", { namedExports: { currentSession: async () => activeUserId ? ({ user: { id: activeUserId } }) : null } });
 mock.module("../server/rate-limit.mjs", { namedExports: { consumeRateLimit: async () => limitError } });
 const { applyVerifiedDeposit, reserveWithdraw, releaseWithdraw, recordWithdrawTransfer, completeWithdraw } = await import("../server/wallet.mjs");
 const { createSkmGameSession, processSkmWalletCallback } = await import("../server/skm-wallet.mjs");
 const { handleWalletProxy } = await import("../server/wallet-proxy.mjs");
+const { default: withdrawHandler } = await import("../api/wallet/withdraw.js");
+const { handleSkmWallet } = await import("../api/_skm-wallet.js");
 
 async function migration(name) {
   await db.exec((await readFile(new URL(`../neon/${name}`, import.meta.url), "utf8")).replace("create extension if not exists pgcrypto;", ""));
@@ -38,8 +45,16 @@ beforeEach(async () => {
   await db.exec("truncate public.wallet_wagering_events, public.skm_wallet_transactions, public.skm_game_sessions, public.deposits, public.withdrawals, public.profiles restart identity cascade");
   limitError = null;
   queryLog = [];
+  queryFault = undefined;
+  activeUserId = undefined;
+  for (const key of payoutKeys) delete process.env[key];
 });
-after(async () => { await db.close(); });
+after(async () => {
+  for (const [key, value] of Object.entries(savedPayoutEnv)) {
+    if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
+  await db.close();
+});
 
 async function player(balance = 0) {
   activeUserId = randomUUID();
@@ -59,6 +74,15 @@ function paymentEnv(t) {
     const old = process.env[key]; process.env[key] = value;
     t.after(() => { if (old === undefined) delete process.env[key]; else process.env[key] = old; });
   }
+}
+function payoutEnv(t, values) {
+  for (const [key, value] of Object.entries(values)) {
+    const original = process.env[key]; process.env[key] = value;
+    t.after(() => { if (original === undefined) delete process.env[key]; else process.env[key] = original; });
+  }
+}
+function response() {
+  return { headers: {}, setHeader(name, value) { this.headers[name.toLowerCase()] = value; }, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; }, end(raw) { this.body = JSON.parse(String(raw)); return this; } };
 }
 function withdrawPayload(overrides = {}) { return { service_type: "kbzpay", amount: 100, phone: "09123456789", request_id: randomUUID(), ...overrides }; }
 const proxyWithdraw = (payload) => handleWalletProxy({ req: req(), functionName: "wallet-withdraw", payload });
@@ -106,7 +130,8 @@ test("simultaneous withdrawal requests reserve once and reject changed replay de
   assert.equal((await db.query("select count(*)::int as n from public.withdrawals")).rows[0].n, 1);
 });
 
-test("withdrawal and refund preserve the maximum supported balance exactly", async () => {
+test("withdrawal and refund preserve the maximum supported balance exactly", async (t) => {
+  payoutEnv(t, { WITHDRAW_MAX_AMOUNT_MMK: String(MAX_MONEY) });
   const user = await player(MAX_MONEY);
   const orderId = randomUUID();
   assert.equal((await reserve(user, Number(MAX_MONEY - 1n), orderId)).balance, 1);
@@ -324,4 +349,158 @@ test("safe-money migration is repeatable and refuses unsafe existing balances wi
   await db.query("update public.profiles set balance=0 where id=$1", [user.userId]);
   await migration("010_money_constraints.sql");
   await assert.rejects(() => db.query("update public.profiles set balance=$2 where id=$1", [user.userId, String(MAX_MONEY + 1n)]));
+});
+
+test("the withdrawal endpoint ignores a forged balance, victim ID and payment success fields", async (t) => {
+  paymentEnv(t);
+  const victim = await player(1000000); const attacker = await player();
+  const payment = t.mock.method(globalThis, "fetch", async () => { throw new Error("Must not pay an unfunded account"); });
+  const res = response();
+  await withdrawHandler({ ...req(), body: withdrawPayload({ user_id: victim.userId, userId: victim.userId, balance: 999999999,
+    status: "paid", success: true, verified: true, amount: 1000000 }) }, res);
+  assert.equal(res.statusCode, 400);
+  assert.equal(await balance(victim), "1000000"); assert.equal(await balance(attacker), "0");
+  activeUserId = undefined;
+  const unauthenticated = response();
+  await withdrawHandler({ ...req(), body: withdrawPayload({ user_id: victim.userId }) }, unauthenticated);
+  assert.equal(unauthenticated.statusCode, 401);
+  assert.equal(payment.mock.callCount(), 0);
+});
+
+test("negative, fractional, unsafe and string payout amounts cannot create money or invoke the gateway", async (t) => {
+  paymentEnv(t); const user = await player(2000000);
+  const payment = t.mock.method(globalThis, "fetch", async () => { throw new Error("Invalid amount must not reach gateway"); });
+  for (const amount of [-100, 0, 0.5, "100", null, true, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal((await proxyWithdraw(withdrawPayload({ amount }))).status, 400);
+  }
+  assert.equal(await balance(user), "2000000");
+  assert.equal(payment.mock.callCount(), 0);
+  assert.equal((await db.query("select count(*)::int as n from public.withdrawals")).rows[0].n, 0);
+});
+
+test("a player's game token alone or a modified signed win cannot mint spendable balance", async (t) => {
+  paymentEnv(t); const user = await player(1000); const debit = event(user); await callback("debit", debit);
+  const honest = Buffer.from(JSON.stringify(credit(debit, 100)));
+  const signed = signedSkmResponse(JSON.parse(String(honest)));
+  const headers = Object.fromEntries(Object.entries(signed.headers).map(([k,v]) => [k.toLowerCase(),v]));
+  const forged = Buffer.from(JSON.stringify({ ...JSON.parse(String(honest)), amount: 1000000 }));
+  for (const candidateHeaders of [{ authorization: `Bearer ${user.token}` }, headers]) {
+    const request = Readable.from([forged]); request.method = "POST"; request.headers = candidateHeaders;
+    const res = response(); await handleSkmWallet(request, res, "credit");
+    assert.equal(res.statusCode, 401);
+  }
+  assert.equal(await balance(user), "900");
+  assert.equal((await callback("credit", JSON.parse(String(honest)))).status, "OK");
+  assert.equal(await balance(user), "1000");
+});
+
+test("a fabricated deposit verification in the browser cannot replace gateway verification", async (t) => {
+  paymentEnv(t); const user = await player();
+  const payment = t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ success: false, code: "not_found" }), { status: 400 }));
+  const result = await handleWalletProxy({ req: req(), functionName: "wallet-deposit", payload: {
+    service_type: "kbzpay", amount: 1000000, transaction_id: "456789", ...verified(), balance: 1000000,
+  } });
+  assert.equal(result.status, 400); assert.equal(await balance(user), "0");
+  assert.equal(payment.mock.callCount(), 1);
+});
+
+test("default limits allow exactly 1000000 Ks and three paid withdrawals per Myanmar day", async (t) => {
+  paymentEnv(t); const user = await player(5000000);
+  const payment = t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ success: true, message: "transfer_success", data: { transaction_id: randomUUID() } })));
+  assert.equal((await proxyWithdraw(withdrawPayload({ amount: 1000001 }))).body.code, "WITHDRAW_LIMIT");
+  assert.equal(payment.mock.callCount(), 0); assert.equal(await balance(user), "5000000");
+  let last;
+  for (let index = 0; index < 3; index++) {
+    last = withdrawPayload({ amount: 1000000 });
+    assert.equal((await proxyWithdraw(last)).body.state, "paid");
+  }
+  assert.equal((await proxyWithdraw(last)).body.state, "paid");
+  const blocked = await proxyWithdraw(withdrawPayload({ max_per_day: 9999, withdraw_count: 0 }));
+  assert.equal(blocked.status, 403); assert.equal(blocked.body.code, "WITHDRAW_DAILY_LIMIT");
+  assert.match(blocked.body.error, /[\u1000-\u109f]/);
+  assert.equal(payment.mock.callCount(), 3); assert.equal(await balance(user), "2000000");
+});
+
+test("many concurrent payout requests and changed IDs produce one transfer while its outcome is pending", async (t) => {
+  paymentEnv(t); const user = await player(1000);
+  let release; let entered;
+  const started = new Promise((resolve) => { entered = resolve; });
+  const payment = t.mock.method(globalThis, "fetch", async () => { entered(); return new Promise((resolve) => { release = resolve; }); });
+  const payload = withdrawPayload(); const first = proxyWithdraw(payload); await started;
+  const others = await Promise.all(Array.from({ length: 30 }, (_, index) => proxyWithdraw(index % 2 ? payload : withdrawPayload())));
+  assert.ok(others.every((result) => result.body.state === "pending"));
+  assert.equal(payment.mock.callCount(), 1); assert.equal(await balance(user), "900");
+  release(new Response(JSON.stringify({ success: true, message: "transfer_success", data: { transaction_id: randomUUID() } })));
+  assert.equal((await first).body.state, "paid");
+});
+
+test("a lost database update after money was sent never refunds or sends the payout again", async (t) => {
+  paymentEnv(t); const user = await player(1000);
+  const payment = t.mock.method(globalThis, "fetch", async () => {
+    queryFault = (sql) => { if (sql.includes("Provider confirmed transfer")) { queryFault = undefined; throw new Error("Simulated database outage after send"); } };
+    return new Response(JSON.stringify({ success: true, message: "transfer_success", data: { transaction_id: "already-paid-at-gateway" } }));
+  });
+  const payload = withdrawPayload(); assert.equal((await proxyWithdraw(payload)).body.state, "pending");
+  assert.equal((await proxyWithdraw(payload)).body.state, "pending");
+  assert.equal((await proxyWithdraw(withdrawPayload())).body.state, "pending");
+  assert.equal(await balance(user), "900"); assert.equal(payment.mock.callCount(), 1);
+});
+
+test("an error reply reporting a transfer ID durably blocks a later refund", async (t) => {
+  paymentEnv(t); const user = await player(1000);
+  const payment = t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
+    success: false, code: "bad_phone", message: "Unexpected failure", data: { transaction_id: "transfer-evidence-in-error" },
+  }), { status: 400 }));
+  const payload = withdrawPayload();
+  assert.equal((await proxyWithdraw(payload)).body.state, "pending");
+  assert.equal((await releaseWithdraw({ userId: user.userId, orderId: `WD${payload.request_id.replaceAll("-", "")}`, message: "Must reconcile first" })).state, "pending");
+  assert.equal((await proxyWithdraw(payload)).body.state, "pending");
+  assert.equal(await balance(user), "900"); assert.equal(payment.mock.callCount(), 1);
+});
+
+test("daily limits exclude yesterday and confirmed failures, and are separate for each player", async (t) => {
+  paymentEnv(t); const user = await player(1000);
+  // Use the DB's Myanmar midnight so this remains valid at any UTC time.
+  for (let index = 0; index < 3; index++) {
+    await db.query(`insert into public.withdrawals (user_id,service_type,order_id,amount,payout_phone,status,created_at)
+      values ($1,'kbzpay',$2,100,'09123456789','paid',
+        (date_trunc('day', statement_timestamp() at time zone 'Asia/Rangoon') at time zone 'Asia/Rangoon') - interval '1 second')`, [user.userId, randomUUID()]);
+  }
+  const failedId = randomUUID(); await reserve(user, 100, failedId);
+  await releaseWithdraw({ userId: user.userId, orderId: failedId, message: "Definite rejection" });
+  const payment = t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ success: true, message: "transfer_success", data: { transaction_id: randomUUID() } })));
+  for (let index = 0; index < 3; index++) assert.equal((await proxyWithdraw(withdrawPayload())).body.state, "paid");
+  assert.equal((await proxyWithdraw(withdrawPayload())).body.code, "WITHDRAW_DAILY_LIMIT");
+  const other = await player(1000);
+  assert.equal((await proxyWithdraw(withdrawPayload())).body.state, "paid");
+  assert.equal(await balance(user), "700"); assert.equal(await balance(other), "900"); assert.equal(payment.mock.callCount(), 4);
+});
+
+test("emergency pause and invalid security settings prevent any reservation or transfer", async (t) => {
+  paymentEnv(t); const user = await player(1000);
+  const payment = t.mock.method(globalThis, "fetch", async () => { throw new Error("Paused payouts must never reach gateway"); });
+  payoutEnv(t, { WITHDRAWALS_ENABLED: "false" });
+  assert.equal((await proxyWithdraw(withdrawPayload())).body.code, "WITHDRAWALS_PAUSED");
+  process.env.WITHDRAWALS_ENABLED = "true"; process.env.WITHDRAW_MAX_PER_DAY = "invalid";
+  t.after(() => delete process.env.WITHDRAW_MAX_PER_DAY);
+  t.mock.method(console, "error", () => {});
+  assert.equal((await proxyWithdraw(withdrawPayload())).status, 500);
+  assert.equal(await balance(user), "1000"); assert.equal(payment.mock.callCount(), 0);
+  assert.equal((await db.query("select count(*)::int as n from public.withdrawals")).rows[0].n, 0);
+});
+
+test("payment requests forbid redirect resends and reject plaintext destinations before moving money", async (t) => {
+  paymentEnv(t); const user = await player(1000);
+  const payment = t.mock.method(globalThis, "fetch", async (_url, options) => {
+    assert.equal(options.redirect, "error");
+    throw new TypeError("A redirect or network failure leaves the outcome unknown");
+  });
+  assert.equal((await proxyWithdraw(withdrawPayload())).body.state, "pending");
+  assert.equal((await proxyDeposit()).status, 502);
+  payoutEnv(t, { PAYMENT_API_URL: "http://insecure.example" });
+  const calls = payment.mock.callCount();
+  t.mock.method(console, "error", () => {});
+  assert.equal((await proxyWithdraw(withdrawPayload())).status, 500);
+  assert.equal((await proxyDeposit()).status, 500);
+  assert.equal(await balance(user), "900"); assert.equal(payment.mock.callCount(), calls);
 });

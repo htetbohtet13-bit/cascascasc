@@ -201,11 +201,13 @@ test("simultaneous duplicate settlements cannot credit the wallet or wagering tw
 });
 
 test("migration is repeatable and historical balances are not retroactively locked", async () => {
+  const user = await player(1000);
   await db.exec("drop table public.wallet_wagering_events");
   try {
-    const user = await player();
-    await deposit(user, 1000);
-    assert.equal(await remaining(user), 0n);
+    await assert.rejects(() => remaining(user), /security storage/);
+    await assert.rejects(() => deposit(user, 1000), /security storage/);
+    await assert.rejects(() => withdraw(user, 1000), /security storage/);
+    assert.equal(await balance(user), 1000);
     await migration("008_deposit_wagering.sql");
     await migration("008_deposit_wagering.sql");
     assert.equal(await remaining(user), 0n);

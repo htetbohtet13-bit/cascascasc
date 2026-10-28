@@ -38,6 +38,10 @@ function hasTransferEvidence(sent) {
 
 function myanPayExecUrl(baseUrl) {
   const base = String(baseUrl || "https://api.myanpay.cc").replace(/\/+$/, "");
+  const url = new URL(base);
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || /[\s\x00-\x1f\x7f]/.test(base)) {
+    throw new Error("The payment service must use a valid HTTPS URL");
+  }
   if (base.endsWith("/api/v1/exec")) return base;
   if (base.endsWith("/api/v1")) return `${base}/exec`;
   return `${base}/api/v1/exec`;
@@ -69,6 +73,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
   if (!Number.isSafeInteger(amount) || amount <= 0) return { status: 400, body: { error: "Enter an amount" } };
 
   try {
+    const paymentUrl = myanPayExecUrl(config.apiUrl);
     if (functionName === "wallet-deposit") {
       const transactionId = String(payload.transaction_id ?? "").replace(/\D/g, "");
       if (!/^\d{6}$/.test(transactionId)) return { status: 400, body: { error: "Enter the last 6 digits" } };
@@ -78,8 +83,9 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       if (limited) return limited;
       let response;
       try {
-        response = await fetch(myanPayExecUrl(config.apiUrl), {
+        response = await fetch(paymentUrl, {
           method: "POST",
+          redirect: "error",
           signal: AbortSignal.timeout(30000),
           headers: {
             "Content-Type": "application/json",
@@ -163,7 +169,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       const withdrawOrderId = `WD${requestId.replaceAll("-", "")}`;
       const reserved = await reserveWithdraw({ userId, orderId: withdrawOrderId, serviceType, amount, phone });
       if (!reserved.ok) return {
-        status: reserved.code === "WAGERING_REQUIRED" ? 403 : 400,
+        status: reserved.status ?? (reserved.code === "WAGERING_REQUIRED" ? 403 : 400),
         body: { error: reserved.message, code: reserved.code, remaining_wagering: reserved.remainingWagering },
       };
       if (reserved.state === "paid") return { status: 200, body: reserved };
@@ -171,8 +177,9 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
 
       let response;
       try {
-        response = await fetch(myanPayExecUrl(config.apiUrl), {
+        response = await fetch(paymentUrl, {
           method: "POST",
+          redirect: "error",
           signal: AbortSignal.timeout(25000),
           headers: {
             "Content-Type": "application/json",
@@ -295,6 +302,12 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
         };
       }
 
+      // Even an error envelope can report that money moved. Save that evidence
+      // so later recovery code cannot treat this as an unsent reservation.
+      const reportedTransactionId = textId(sent?.data?.transaction_id);
+      if (reportedTransactionId) {
+        await recordWithdrawTransfer({ userId, orderId: withdrawOrderId, providerTransactionId: reportedTransactionId }).catch(() => false);
+      }
       // Unknown replies are treated as ambiguous: keep the reservation to prevent a duplicate payout.
       return {
         status: 202,
