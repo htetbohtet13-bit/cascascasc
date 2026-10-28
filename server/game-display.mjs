@@ -7,15 +7,26 @@ export async function applyGameDisplaySettings(pool, providerGames, { includeHid
   if (gameCodes.length) {
     try {
       const result = await pool.query(
-        `select game_code, image_url, players_online, sort_order, is_active
+        `select game_code, image_url, players_online, sort_order, is_active, is_hot
            from public.game_display_settings
           where game_code = any($1::text[])`,
         [gameCodes],
       );
       settings = result.rows;
     } catch (error) {
-      if (error?.code !== "42P01") throw error;
-      settingsConfigured = false;
+      if (error?.code === "42703") {
+        const result = await pool.query(
+          `select game_code, image_url, players_online, sort_order, is_active
+             from public.game_display_settings
+            where game_code = any($1::text[])`,
+          [gameCodes],
+        );
+        settings = result.rows.map((setting) => ({ ...setting, is_hot: false }));
+      } else if (error?.code === "42P01") {
+        settingsConfigured = false;
+      } else {
+        throw error;
+      }
     }
   }
 
@@ -28,6 +39,7 @@ export async function applyGameDisplaySettings(pool, providerGames, { includeHid
       players_online: setting?.players_online ?? null,
       sort_order: setting?.sort_order ?? index + 1,
       is_active: setting?.is_active ?? true,
+      is_hot: setting?.is_hot ?? false,
       _provider_order: index,
     };
   });

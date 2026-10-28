@@ -20,7 +20,7 @@ type ProviderPool = {
 type ProviderTable = { table_id: string; name: string; currency: string };
 type ProviderGame = {
   game_code: string; name: string; pools?: ProviderPool[]; tables?: ProviderTable[];
-  image_url?: string | null; players_online?: number | null; sort_order?: number; is_active?: boolean;
+  image_url?: string | null; players_online?: number | null; sort_order?: number; is_active?: boolean; is_hot?: boolean;
 };
 type Payload = {
   summary?: Summary; latestBets?: BetRow[]; latestWithdrawals?: WalletRow[];
@@ -305,6 +305,9 @@ function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games:
   const [visibilitySavingCode, setVisibilitySavingCode] = useState("");
   const [visibilityOverrides, setVisibilityOverrides] = useState<Record<string, boolean>>({});
   const [visibilityError, setVisibilityError] = useState("");
+  const [hotSavingCode, setHotSavingCode] = useState("");
+  const [hotOverrides, setHotOverrides] = useState<Record<string, boolean>>({});
+  const [hotError, setHotError] = useState("");
 
   useEffect(() => {
     setVisibilityOverrides((current) => {
@@ -317,8 +320,23 @@ function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games:
     });
   }, [games]);
 
+  useEffect(() => {
+    setHotOverrides((current) => {
+      const next = { ...current };
+      for (const [code, hot] of Object.entries(current)) {
+        const game = games.find((item) => item.game_code === code);
+        if (game && (game.is_hot === true) === hot) delete next[code];
+      }
+      return next;
+    });
+  }, [games]);
+
   function isVisible(game: ProviderGame) {
     return visibilityOverrides[game.game_code] ?? game.is_active !== false;
+  }
+
+  function isHot(game: ProviderGame) {
+    return hotOverrides[game.game_code] ?? game.is_hot === true;
   }
 
   async function toggleVisibility(game: ProviderGame) {
@@ -346,6 +364,30 @@ function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games:
       setVisibilityError(reason instanceof Error ? reason.message : "Could not update game visibility");
     } finally {
       setVisibilitySavingCode("");
+    }
+  }
+
+  async function toggleHot(game: ProviderGame) {
+    const wasHot = isHot(game);
+    const nextHot = !wasHot;
+    setHotOverrides((current) => ({ ...current, [game.game_code]: nextHot }));
+    setHotSavingCode(game.game_code);
+    setHotError("");
+    try {
+      const response = await fetch("/api/admin", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "set_game_hot", game_code: game.game_code, is_hot: nextHot }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Could not update hot status");
+      onSaved();
+    } catch (reason) {
+      setHotOverrides((current) => ({ ...current, [game.game_code]: wasHot }));
+      setHotError(reason instanceof Error ? reason.message : "Could not update hot status");
+    } finally {
+      setHotSavingCode("");
     }
   }
 
@@ -394,7 +436,8 @@ function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games:
       <div className="admin-game-heading"><div><span>LIVE PROVIDER CATALOG</span><h2>Manage games</h2><p>Edit artwork, player count, visibility, and order. Provider availability and stake levels stay synced.</p></div></div>
       {!settingsConfigured ? <div className="admin-error">Run <code>neon/006_game_display_settings.sql</code> in the Neon SQL Editor to enable game editing.</div> : null}
       {visibilityError ? <div className="admin-error" role="alert">{visibilityError}</div> : null}
-      <div className="admin-games-table-wrap"><table className="admin-table"><thead><tr><th>Game</th><th>Game code</th><th>MMK pools</th><th>MMK tables</th><th>Active players</th><th>Order</th><th>Visible</th><th /></tr></thead><tbody>
+      {hotError ? <div className="admin-error" role="alert">{hotError}</div> : null}
+      <div className="admin-games-table-wrap"><table className="admin-table"><thead><tr><th>Game</th><th>Game code</th><th>MMK pools</th><th>MMK tables</th><th>Active players</th><th>Order</th><th>Visible</th><th>Hot</th><th /></tr></thead><tbody>
         {games.map((game) => {
           const pools = (game.pools ?? []).filter((pool) => pool.currency === "MMK");
           const tables = (game.tables ?? []).filter((table) => table.currency === "MMK");
@@ -411,10 +454,18 @@ function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games:
                 aria-pressed={isVisible(game)}
                 title={isVisible(game) ? "Click to hide this game" : "Click to show this game"}
               ><i aria-hidden="true" />{visibilitySavingCode === game.game_code ? "Saving…" : isVisible(game) ? "Visible" : "Hidden"}</button></td>
+              <td><button
+                type="button"
+                className={`admin-game-hot ${isHot(game) ? "is-hot" : "not-hot"}`}
+                onClick={() => void toggleHot(game)}
+                disabled={!settingsConfigured || hotSavingCode !== ""}
+                aria-pressed={isHot(game)}
+                title={isHot(game) ? "Click to remove from popular games" : "Click to mark as popular"}
+              ><i aria-hidden="true" />{hotSavingCode === game.game_code ? "Saving…" : isHot(game) ? "Hot" : "Not hot"}</button></td>
               <td><div className="admin-game-actions"><button type="button" onClick={() => edit(game)}>Edit</button></div></td>
             </tr>
             {editingCode === game.game_code ? (
-              <tr key={`${game.game_code}-edit`}><td colSpan={8}>
+              <tr key={`${game.game_code}-edit`}><td colSpan={9}>
                 <form className="admin-game-form" onSubmit={(event) => void save(event)}>
                   <div className="admin-game-form-heading"><strong>Edit {game.name}</strong><button type="button" onClick={() => { setEditingCode(""); setSaveError(""); }}>Cancel</button></div>
                   <div className="admin-game-form-grid">
@@ -436,7 +487,7 @@ function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games:
             ) : null}
           </Fragment>;
         })}
-        {!games.length ? <tr><td colSpan={8}><TableEmpty loading={loading} /></td></tr> : null}
+        {!games.length ? <tr><td colSpan={9}><TableEmpty loading={loading} /></td></tr> : null}
       </tbody></table></div>
     </>
   );

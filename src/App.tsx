@@ -24,10 +24,6 @@ type GameLaunchOption = {
   tierIndex: number;
 };
 
-const TABLE_GAME_CODES = new Set([
-  "shankoemee", "bugyee", "abcd", "dragontiger", "myanmarpoker13card", "shankoemee3d",
-]);
-
 const GAME_CATEGORIES: ReadonlyArray<{ id: GameFilter; label: string; icon: string }> = [
   { id: "popular", label: "နာမည်ကြီး", icon: "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/smt223_hot.png" },
   { id: "cards", label: "ဖဲဂိမ်း", icon: "https://cdn.myanmarshankoeme.com/build/assets/img/bf688/pok3.webp" },
@@ -400,10 +396,11 @@ export default function App() {
   const balance = profile?.balance ?? 0;
   const visibleGames = games
     .filter((game) => {
-      const isTableGame = TABLE_GAME_CODES.has(game.game_code.toLowerCase());
-      const isBuffalo = game.game_code.toLowerCase().includes("buffalo") || game.name.toLowerCase().includes("buffalo");
-      if (gameFilter === "cards") return isTableGame;
-      if (gameFilter === "slots") return !isTableGame && !isBuffalo;
+      const isBuffalo = game.name.toLowerCase().includes("buffalo");
+      const mmkPoolCount = (game.pools ?? []).filter((pool) => pool.currency === "MMK").length;
+      if (gameFilter === "popular") return game.is_hot === true;
+      if (gameFilter === "cards") return !isBuffalo && mmkPoolCount > 1;
+      if (gameFilter === "slots") return !isBuffalo && mmkPoolCount <= 1;
       if (gameFilter === "buffalo") return isBuffalo;
       return true;
     })

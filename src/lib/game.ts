@@ -23,6 +23,7 @@ export type Game = {
   players_online?: number | null;
   sort_order?: number;
   is_active?: boolean;
+  is_hot?: boolean;
 };
 export type SlotBet = {
   bet_uid: string;
