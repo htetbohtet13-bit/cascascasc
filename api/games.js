@@ -1,10 +1,10 @@
-import { listProviderGames } from "../server/skm-api.mjs";
+import { listAppGames } from "../server/skm-api.mjs";
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
   try {
-    return res.status(200).json({ games: await listProviderGames() });
+    return res.status(200).json({ games: await listAppGames() });
   } catch (error) {
     console.error("Game catalog lookup failed", error);
     const status = Number.isInteger(error?.status) ? error.status : 502;

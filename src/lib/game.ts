@@ -20,6 +20,7 @@ export type Game = {
   pools?: GamePool[];
   tables?: GameTable[];
   image_url?: string | null;
+  catalog_only?: boolean;
 };
 export type SlotBet = {
   bet_uid: string;

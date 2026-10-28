@@ -9,6 +9,47 @@ export class SkmApiError extends Error {
   }
 }
 
+export const MANUAL_GAME_CATALOG = [
+  ["shankoemee", "Shan Koe Mee"],
+  ["bugyee", "Bu Gyee (ဘူကြီး)"],
+  ["abcd", "ABCD"],
+  ["dragontiger", "Dragon Tiger (ကျားနဂါး)"],
+  ["myanmarpoker13card", "Myanmar Poker 13 Card"],
+  ["shankoemee3d", "3D Shan Koe Mee"],
+  ["africanbuffaloplus", "African Buffalo Plus"],
+  ["goldencentury", "Golden Century"],
+  ["autumnmoon", "Autumn Moon"],
+  ["fortunecat", "Fortune Cat"],
+  ["autumnmoon88", "Autumn Moon 88"],
+  ["goldencentury88", "Golden Century 88"],
+  ["imperialseal", "Imperial Seal"],
+  ["change", "Chang'E"],
+  ["emperorspower", "Emperor's Power"],
+  ["pandamagic", "Panda Magic"],
+  ["goldenbuddha", "Golden Buddha"],
+  ["chinawild", "China Wild"],
+  ["piratefortune", "Pirate Fortune"],
+  ["goldwithmoneyball", "Gold With Money Ball"],
+  ["koicash", "Koi Cash"],
+  ["chinesetemple", "Chinese Temple"],
+  ["fortunekoi", "Fortune Koi"],
+  ["eyeofwealth", "Eye of Wealth"],
+  ["springfestival", "Spring Festival"],
+  ["peacelonglife", "Peace Long Life"],
+  ["happyprosperous", "Happy Prosperous"],
+  ["sinbadsventure", "Sinbad's Venture"],
+  ["thunderfire", "Thunder Fire"],
+  ["granddragons", "Grand Dragons"],
+  ["luxurylinebuffalo", "Luxury Line Buffalo"],
+  ["africanbuffalomegaways", "African Buffalo Megaways"],
+  ["risingfortune", "Rising Fortune"],
+  ["endlesstreasure", "Endless Treasure"],
+  ["prancingpigs", "Prancing Pigs"],
+  ["ultimatefirelink", "Ultimate Fire Link"],
+].map(([game_code, name]) => ({ game_code, name, pools: [], tables: [], catalog_only: true }));
+
+const MANUAL_GAME_BY_CODE = new Map(MANUAL_GAME_CATALOG.map((game) => [game.game_code, game]));
+
 export function skmConfig() {
   const apiBaseUrl = String(process.env.gameapibaseurl ?? "").trim().replace(/\/+$/, "");
   const operatorCode = String(process.env.operatorcode ?? "").trim();
@@ -146,4 +187,28 @@ export async function listProviderGames({ refresh = false } = {}) {
   gamesCache = payload.games;
   gamesCacheAt = Date.now();
   return gamesCache;
+}
+
+export async function listAppGames() {
+  let providerGames = [];
+  try {
+    providerGames = await listProviderGames();
+  } catch {
+    // Keep the documented catalog visible while the provider catalog endpoint is unavailable.
+  }
+  const liveByCode = new Map(providerGames.map((game) => [game?.game_code, game]));
+  const catalog = MANUAL_GAME_CATALOG.map((manualGame) => {
+    const liveGame = liveByCode.get(manualGame.game_code);
+    const hasMmkOptions = [...(liveGame?.pools ?? []), ...(liveGame?.tables ?? [])]
+      .some((option) => option?.currency === "MMK");
+    return hasMmkOptions
+      ? { ...manualGame, ...liveGame, catalog_only: false }
+      : { ...manualGame, ...(liveGame?.image_url ? { image_url: liveGame.image_url } : {}) };
+  });
+  const knownCodes = new Set(MANUAL_GAME_CATALOG.map((game) => game.game_code));
+  return [...catalog, ...providerGames.filter((game) => !knownCodes.has(game?.game_code))];
+}
+
+export function manualGameByCode(gameCode) {
+  return MANUAL_GAME_BY_CODE.get(gameCode);
 }
