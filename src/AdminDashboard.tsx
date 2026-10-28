@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useState, type FormEvent } from "react";
 
 type Section = "overview" | "users" | "games" | "bets" | "deposits" | "withdrawals";
 type UserRow = { id: string; phone: string; balance: number | string; created_at: string };
@@ -20,11 +20,12 @@ type ProviderPool = {
 type ProviderTable = { table_id: string; name: string; currency: string };
 type ProviderGame = {
   game_code: string; name: string; pools?: ProviderPool[]; tables?: ProviderTable[];
+  image_url?: string | null; players_online?: number | null; sort_order?: number; is_active?: boolean;
 };
 type Payload = {
   summary?: Summary; latestBets?: BetRow[]; latestWithdrawals?: WalletRow[];
   users?: UserRow[]; games?: ProviderGame[]; bets?: BetRow[]; deposits?: WalletRow[]; withdrawals?: WalletRow[];
-  user?: UserRow; total?: number; page?: number; pageSize?: number;
+  user?: UserRow; total?: number; page?: number; pageSize?: number; settingsConfigured?: boolean;
 };
 type UserDetail = Payload & { user: UserRow; bets: BetRow[]; deposits: WalletRow[]; withdrawals: WalletRow[] };
 
@@ -242,7 +243,7 @@ export default function AdminDashboard() {
         ) : section === "overview" ? (
           <Overview data={data} loading={loading} onOpen={changeSection} />
         ) : section === "games" ? (
-          <div className="admin-page-content"><ProviderGames games={(data as Payload).games ?? []} loading={loading} /></div>
+          <div className="admin-page-content"><ProviderGames games={(data as Payload).games ?? []} loading={loading} settingsConfigured={(data as Payload).settingsConfigured !== false} onSaved={() => setRefreshKey((value) => value + 1)} /></div>
         ) : (
           <div className="admin-page-content">
             <div className="admin-list-toolbar">
@@ -296,17 +297,92 @@ function Overview({ data, loading, onOpen }: { data: Payload; loading: boolean; 
   );
 }
 
-function ProviderGames({ games, loading }: { games: ProviderGame[]; loading: boolean }) {
+function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games: ProviderGame[]; loading: boolean; settingsConfigured: boolean; onSaved: () => void }) {
+  const [editingCode, setEditingCode] = useState("");
+  const [draft, setDraft] = useState({ image_url: "", players_online: "", sort_order: "", is_active: true });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  function edit(game: ProviderGame) {
+    setEditingCode(game.game_code);
+    setSaveError("");
+    setDraft({
+      image_url: game.image_url ?? "",
+      players_online: game.players_online == null ? "" : String(game.players_online),
+      sort_order: String(game.sort_order ?? 0),
+      is_active: game.is_active !== false,
+    });
+  }
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setSaveError("");
+    try {
+      const response = await fetch("/api/admin", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_game_settings",
+          game_code: editingCode,
+          image_url: draft.image_url,
+          players_online: draft.players_online,
+          sort_order: Number(draft.sort_order),
+          is_active: draft.is_active,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Could not save game settings");
+      setEditingCode("");
+      onSaved();
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : "Could not save game settings");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <>
-      <div className="admin-game-heading"><div><span>LIVE PROVIDER CATALOG</span><h2>Available games</h2><p>Synced from the provider. Game availability and stake levels come from its API.</p></div></div>
-      <div className="admin-games-table-wrap"><table className="admin-table"><thead><tr><th>Game</th><th>Game code</th><th>MMK pools</th><th>MMK tables</th><th>Stake levels</th></tr></thead><tbody>
+      <div className="admin-game-heading"><div><span>LIVE PROVIDER CATALOG</span><h2>Manage games</h2><p>Edit artwork, player count, visibility, and order. Provider availability and stake levels stay synced.</p></div></div>
+      {!settingsConfigured ? <div className="admin-error">Run <code>neon/006_game_display_settings.sql</code> in the Neon SQL Editor to enable game editing.</div> : null}
+      <div className="admin-games-table-wrap"><table className="admin-table"><thead><tr><th>Game</th><th>Game code</th><th>MMK pools</th><th>MMK tables</th><th>Active players</th><th>Order</th><th>Visible</th><th /></tr></thead><tbody>
         {games.map((game) => {
           const pools = (game.pools ?? []).filter((pool) => pool.currency === "MMK");
           const tables = (game.tables ?? []).filter((table) => table.currency === "MMK");
-          return <tr key={game.game_code}><td><strong>{game.name}</strong></td><td>{game.game_code}</td><td>{pools.length}</td><td>{tables.length}</td><td>{pools.map((pool) => pool.name).join(", ") || "—"}</td></tr>;
+          return <Fragment key={game.game_code}>
+            <tr>
+              <td><div className="admin-game-cell">{game.image_url ? <img src={game.image_url} alt="" /> : <span>{game.name.slice(0, 1)}</span>}<strong>{game.name}</strong></div></td>
+              <td>{game.game_code}</td><td>{pools.length}</td><td>{tables.length}</td>
+              <td>{game.players_online == null ? "—" : Number(game.players_online).toLocaleString()}</td>
+              <td>{game.sort_order ?? "—"}</td><td>{game.is_active === false ? "Hidden" : "Shown"}</td>
+              <td><div className="admin-game-actions"><button type="button" onClick={() => edit(game)}>Edit</button></div></td>
+            </tr>
+            {editingCode === game.game_code ? (
+              <tr key={`${game.game_code}-edit`}><td colSpan={8}>
+                <form className="admin-game-form" onSubmit={(event) => void save(event)}>
+                  <div className="admin-game-form-heading"><strong>Edit {game.name}</strong><button type="button" onClick={() => { setEditingCode(""); setSaveError(""); }}>Cancel</button></div>
+                  <div className="admin-game-form-grid">
+                    <label className="admin-game-image-field">Game image URL (HTTPS)
+                      <input type="url" value={draft.image_url} onChange={(event) => setDraft((current) => ({ ...current, image_url: event.target.value }))} placeholder="https://…" />
+                    </label>
+                    <label>Active players
+                      <input type="number" min="0" step="1" value={draft.players_online} onChange={(event) => setDraft((current) => ({ ...current, players_online: event.target.value }))} placeholder="Leave blank to hide" />
+                    </label>
+                    <label>Display order
+                      <input type="number" min="0" max="1000000" step="1" value={draft.sort_order} onChange={(event) => setDraft((current) => ({ ...current, sort_order: event.target.value }))} required />
+                    </label>
+                    <label className="admin-game-check-label"><input type="checkbox" checked={draft.is_active} onChange={(event) => setDraft((current) => ({ ...current, is_active: event.target.checked }))} /> Show on homepage</label>
+                  </div>
+                  {saveError ? <p className="admin-game-error" role="alert">{saveError}</p> : null}
+                  <div className="admin-game-form-actions"><button className="admin-add-game" type="submit" disabled={saving || !settingsConfigured}>{saving ? "Saving…" : "Save changes"}</button></div>
+                </form>
+              </td></tr>
+            ) : null}
+          </Fragment>;
         })}
-        {!games.length ? <tr><td colSpan={5}><TableEmpty loading={loading} /></td></tr> : null}
+        {!games.length ? <tr><td colSpan={8}><TableEmpty loading={loading} /></td></tr> : null}
       </tbody></table></div>
     </>
   );

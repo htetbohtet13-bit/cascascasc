@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { getPool } from "./neon.mjs";
 import { listProviderGames } from "./skm-api.mjs";
+import { applyGameDisplaySettings } from "./game-display.mjs";
 
 const PAGE_SIZE = 50;
 const MAX_PAGE = 1_000_000;
@@ -49,6 +50,61 @@ function passwordsMatch(attempt, secret) {
   const expected = createHash("sha256").update(secret).digest();
   const actual = createHash("sha256").update(attempt).digest();
   return timingSafeEqual(actual, expected);
+}
+
+async function saveGameSettings(body) {
+  const gameCode = typeof body?.game_code === "string" ? body.game_code.trim() : "";
+  if (!/^[a-z0-9]{1,80}$/.test(gameCode)) {
+    return { status: 400, body: { error: "Invalid provider game code" } };
+  }
+
+  const imageInput = typeof body?.image_url === "string" ? body.image_url.trim() : "";
+  let imageUrl = null;
+  if (imageInput) {
+    if (imageInput.length > 2048) return { status: 400, body: { error: "Image URL is too long" } };
+    try {
+      const parsed = new URL(imageInput);
+      if (parsed.protocol !== "https:" || parsed.username || parsed.password) throw new Error("invalid image URL");
+      imageUrl = parsed.toString();
+    } catch {
+      return { status: 400, body: { error: "Enter a valid HTTPS image URL" } };
+    }
+  }
+
+  const playersInput = body?.players_online;
+  const playersOnline = playersInput === "" || playersInput == null ? null : Number(playersInput);
+  if (playersOnline !== null && (!Number.isInteger(playersOnline) || playersOnline < 0 || playersOnline > 1_000_000_000)) {
+    return { status: 400, body: { error: "Player count must be a whole number from 0 to 1,000,000,000" } };
+  }
+
+  const sortOrder = Number(body?.sort_order);
+  if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 1_000_000) {
+    return { status: 400, body: { error: "Sort order must be a whole number from 0 to 1,000,000" } };
+  }
+  if (typeof body?.is_active !== "boolean") {
+    return { status: 400, body: { error: "Choose whether this game is visible" } };
+  }
+
+  try {
+    await getPool().query(
+      `insert into public.game_display_settings
+         (game_code, image_url, players_online, sort_order, is_active, updated_at)
+       values ($1, $2, $3, $4, $5, now())
+       on conflict (game_code) do update set
+         image_url = excluded.image_url,
+         players_online = excluded.players_online,
+         sort_order = excluded.sort_order,
+         is_active = excluded.is_active,
+         updated_at = now()`,
+      [gameCode, imageUrl, playersOnline, sortOrder, body.is_active],
+    );
+  } catch (error) {
+    if (error?.code === "42P01") {
+      return { status: 503, body: { error: "Run neon/006_game_display_settings.sql in the Neon SQL Editor first" } };
+    }
+    throw error;
+  }
+  return { status: 200, body: { ok: true, game_code: gameCode } };
 }
 
 function sameOrigin(req) {
@@ -216,6 +272,7 @@ export async function handleAdminApi(req) {
       };
     }
     if (!validAdminSession(req, secret)) return { status: 401, body: { error: "Enter the admin password to continue" } };
+    if (action === "save_game_settings") return await saveGameSettings(req.body);
     return { status: 400, body: { error: "Unknown admin action" } };
   }
   if (req.method !== "GET") return { status: 405, body: { error: "Method not allowed" } };
@@ -227,7 +284,11 @@ export async function handleAdminApi(req) {
   try {
     if (view === "overview") return { status: 200, body: await overview(pool) };
     if (view === "users") return { status: 200, body: await users(pool, url) };
-    if (view === "games") return { status: 200, body: { games: await listProviderGames({ refresh: true }) } };
+    if (view === "games") {
+      const providerGames = await listProviderGames({ refresh: true });
+      const display = await applyGameDisplaySettings(pool, providerGames, { includeHidden: true });
+      return { status: 200, body: display };
+    }
     if (view === "bets") return { status: 200, body: await bets(pool, url) };
     if (view === "deposits") return { status: 200, body: await walletList(pool, url, "deposit") };
     if (view === "withdrawals") return { status: 200, body: await walletList(pool, url, "withdraw") };

@@ -247,6 +247,11 @@ export default function App() {
       return;
     }
     setError("");
+    const launchOptions = gameLaunchOptions(game);
+    if (launchOptions.length === 1) {
+      void onSelectStake(game, launchOptions[0].tableId);
+      return;
+    }
     setSelectedGame(game);
   }
 
@@ -570,6 +575,7 @@ export default function App() {
                               )}
                             </div>
                             <span className="game-provider-label">{TABLE_GAME_CODES.has(game.game_code) ? "ကတ်ဂိမ်း" : "Slot"}</span>
+                            {game.players_online != null ? <span className="game-players"><i />{Number(game.players_online).toLocaleString("en-US")} players</span> : null}
                           </button>
                         );
                       })}

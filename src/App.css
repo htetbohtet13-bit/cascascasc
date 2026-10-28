@@ -3619,6 +3619,9 @@
 .admin-game-checks { display: flex; flex-wrap: wrap; gap: 16px; }
 .admin-game-checks label { display: flex; align-items: center; gap: 6px; }
 .admin-game-checks input { accent-color: #b78318; }
+.admin-game-check-label { display: flex !important; align-items: center; gap: 8px !important; align-self: end; min-height: 37px; }
+.admin-game-check-label input { width: 15px; height: 15px; accent-color: #b78318; }
+.admin-game-form-actions { display: flex; justify-content: flex-end; }
 .admin-game-error { margin: 0; color: #a24e3b; font-size: 10px; }
 .admin-games-table-wrap { overflow: auto; border: 1px solid #ede5d9; border-radius: 12px; background: #fffdf8; }
 .admin-game-cell { display: flex; min-width: 160px; align-items: center; gap: 8px; }
@@ -3655,7 +3658,7 @@
 .game-art::after { content: ""; position: absolute; z-index: 2; inset: 0; display: block; pointer-events: none; background-image: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, .16) 50%, transparent 70%); background-size: 300% 100%; animation: shimmerMove 3.5s linear infinite; }
 .game-tile:hover .game-art, .game-tile:focus-visible .game-art { outline: 1.5px solid var(--game-glow-hover, rgba(213, 150, 18, .4)); outline-offset: 1px; box-shadow: 0 16px 40px var(--game-glow-hover, rgba(75, 51, 13, .4)); }
 .game-art-placeholder { position: absolute; inset: 0; display: grid; place-items: center; padding: 12px; color: #fff8e9; font-size: 14px; font-weight: 900; text-align: center; text-shadow: 0 2px 8px rgba(0, 0, 0, .45); }
-.game-players { display: flex; min-height: 13px; align-items: center; gap: 5px; color: rgba(52, 39, 25, .58); font-size: 10px; font-weight: 650; line-height: 1; }
+.game-players { display: flex; min-height: 13px; align-items: center; gap: 5px; color: rgba(255, 255, 255, .52); font-size: 10px; font-weight: 650; line-height: 1; }
 .game-players i { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 0 rgba(34, 197, 94, .46); animation: playersPulse 1.8s ease-out infinite; }
 .games-empty { padding: 28px 16px; }
 
