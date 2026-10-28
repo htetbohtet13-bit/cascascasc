@@ -181,17 +181,19 @@
 }
 
 .banner-wrap {
-  padding: 14px 16px 4px;
+  padding: 0;
   animation: fadeSlideUp 0.5s 0.14s cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 .banner {
-  border-radius: 22px;
+  width: 100%;
+  aspect-ratio: 750 / 275;
+  height: auto;
+  border-radius: 0;
   overflow: hidden;
   position: relative;
-  height: 200px;
   background: #0a0c14;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: none;
 }
 
 .banner img {
@@ -3792,7 +3794,7 @@
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 5px;
-  padding: 12px 10px 0;
+  padding: 4px 10px 0;
   overflow: hidden;
 }
 .chip {
