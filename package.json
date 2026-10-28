@@ -9,6 +9,7 @@
     "start": "node server/index.mjs",
     "build": "vite build",
     "test:wagering": "node --experimental-test-module-mocks --test tests/wagering.test.mjs",
+    "test:security": "node --experimental-test-module-mocks --test --test-concurrency=1 tests/auth-security.test.mjs tests/admin-logout.test.mjs tests/money-security.test.mjs tests/provider-security.test.mjs tests/wagering.test.mjs tests/database-permissions.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -22,6 +23,6 @@
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.2",
     "typescript": "^5.9.2",
-    "vite": "^7.1.5"
+    "vite": "^7.3.7"
   }
 }

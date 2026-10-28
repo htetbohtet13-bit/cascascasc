@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { currentSession } from "./auth.mjs";
 import { paymentConfig } from "./payment-env.mjs";
+import { unsafeRequestError } from "./request-security.mjs";
+import { consumeRateLimit } from "./rate-limit.mjs";
 import { applyVerifiedDeposit, completeWithdraw, recordWithdrawTransfer, releaseWithdraw, reserveWithdraw, walletHistory, walletMethods } from "./wallet.mjs";
 
-const amountOf = (value) => Number(value);
+const amountOf = (value) => typeof value === "number" ? value : NaN;
 const phoneOf = (value) => {
   let digits = String(value ?? "").replace(/\D/g, "");
   if (digits.startsWith("95") && digits.length >= 10) digits = `0${digits.slice(2)}`;
@@ -11,6 +13,28 @@ const phoneOf = (value) => {
   return digits;
 };
 const orderId = (prefix) => `${prefix}${randomUUID().replaceAll("-", "")}`.slice(0, 40);
+const providerOf = (value) => value === "wavepay" ? "wave" : value;
+const textId = (value) => typeof value === "string" && value.trim().length <= 160 ? value.trim() : "";
+
+function transferMatches(data, { serviceType, amount, phone }) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return false;
+  // The gateway's response example includes these fields, but does not declare
+  // them mandatory. Any supplied evidence must match the reserved transfer.
+  return (data.amount === undefined || (typeof data.amount === "number" && data.amount === amount)) &&
+    (data.recipient === undefined || (typeof data.recipient === "string" && phoneOf(data.recipient) === phone)) &&
+    (data.provider === undefined || providerOf(data.provider) === providerOf(serviceType)) &&
+    (data.currency === undefined || data.currency === "MMK") &&
+    (data.status === undefined || data.status === "success");
+}
+
+function hasTransferEvidence(sent) {
+  // Error envelopes have no documented transfer status. Any nonempty status
+  // alongside a rejection code is contradictory evidence, not proof of no send.
+  const transferStatus = sent?.data?.status;
+  return Boolean(sent?.data?.transaction_id) ||
+    (transferStatus !== undefined && transferStatus !== null && String(transferStatus).trim() !== "") ||
+    /already|duplicate|processed|pending|unknown|time.?out|transfer_success|successful|completed/i.test(String(sent?.message ?? ""));
+}
 
 function myanPayExecUrl(baseUrl) {
   const base = String(baseUrl || "https://api.myanpay.cc").replace(/\/+$/, "");
@@ -20,6 +44,8 @@ function myanPayExecUrl(baseUrl) {
 }
 
 export async function handleWalletProxy({ req, functionName, method = "POST", payload = {} }) {
+  const requestError = unsafeRequestError(req);
+  if (requestError) return requestError;
   const session = await currentSession(req);
   if (!session?.user) return { status: 401, body: { error: "Not authenticated" } };
   const userId = session.user.id;
@@ -48,6 +74,8 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       if (!/^\d{6}$/.test(transactionId)) return { status: 400, body: { error: "Enter the last 6 digits" } };
       const receiver = serviceType === "kbzpay" ? config.kbzReceiver : config.waveReceiver;
       if (!config.apiKey || !receiver) return { status: 500, body: { error: "Payment is not configured" } };
+      const limited = await consumeRateLimit(req, "deposit-verify", userId);
+      if (limited) return limited;
       let response;
       try {
         response = await fetch(myanPayExecUrl(config.apiUrl), {
@@ -90,15 +118,19 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
         if (code === "account_not_connected") {
           return { status: 400, body: { error: "This payment account is not connected. Please contact support." } };
         }
-        return { status: response.status >= 500 ? 502 : 400, body: { error: verified.message ?? "Payment could not be verified" } };
+        return { status: response.status >= 500 ? 502 : 400, body: { error: "Payment could not be verified. Please check your receipt or contact support." } };
       }
 
-      const fullTransactionId = String(verified.data.transaction_id ?? "").trim();
-      const paid = amountOf(verified.data.amount);
-      if (!fullTransactionId || !Number.isSafeInteger(paid) || paid <= 0) {
+      const fullTransactionId = textId(verified.data.transaction_id);
+      const paid = verified.data.amount;
+      if (!fullTransactionId || !fullTransactionId.endsWith(transactionId) ||
+          !Number.isSafeInteger(paid) || paid <= 0 || verified.data.mode !== "direct" ||
+          providerOf(verified.data.provider) !== providerOf(serviceType) ||
+          typeof verified.data.account !== "string" || phoneOf(verified.data.account) !== phoneOf(receiver) ||
+          verified.data.currency !== "MMK") {
         return { status: 502, body: { error: "The payment service returned an incomplete verification result" } };
       }
-      if (paid !== amount) return { status: 400, body: { error: `Paid amount is ${paid}, but you entered ${amount}` } };
+      if (paid !== amount) return { status: 400, body: { error: "The payment details do not match. Check your receipt and try again." } };
       let result;
       try {
         result = await applyVerifiedDeposit({
@@ -171,22 +203,30 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       const sent = await response.json().catch(() => null);
       const message = String(sent?.message ?? "").toLowerCase();
       const code = String(sent?.code ?? "").toLowerCase();
-      const providerError = code || message;
-      const definiteFailure = ["bad_phone", "bad_amount", "no_pin", "pin_failed", "account_not_connected"]
-        .some((known) => providerError.includes(known));
+      const definiteFailure = !hasTransferEvidence(sent) && (
+        (response.status === 400 && ["bad_phone", "bad_amount", "no_pin", "pin_failed"].includes(code)) ||
+        (response.status === 409 && code === "account_not_connected")
+      );
 
-      if (sent?.success === true && (message === "otp_required" || code === "otp_required")) {
+      if (response.status === 200 && sent?.success === true && message === "otp_required" &&
+          (!code || code === "otp_required") && sent?.data?.otp_required === true && textId(sent?.data?.tx_id) && !hasTransferEvidence(sent)) {
         const failureMessage = "This payment account requires an OTP. OTP withdrawals are not enabled, so no money was sent. Your balance has been returned.";
         const result = await releaseWithdraw({ userId, orderId: withdrawOrderId, message: failureMessage });
+        if (!result.ok || result.state !== "failed") return { status: 202, body: { ok: true, state: "pending", balance: result.balance, orderId: withdrawOrderId, message: "Your withdrawal requires reconciliation. Do not submit it again." } };
         return {
           status: 200,
           body: { ok: false, state: "failed", balance: result.balance, safeToRetry: true, message: failureMessage },
         };
       }
 
-      if (sent?.success === true && message === "transfer_success") {
-        const providerTransactionId = String(sent?.data?.transaction_id ?? "").trim();
-        if (!providerTransactionId) {
+      if (response.status === 200 && sent?.success === true && message === "transfer_success") {
+        const providerTransactionId = textId(sent?.data?.transaction_id);
+        if (!providerTransactionId || (code && code !== "transfer_success") || !transferMatches(sent?.data, { serviceType, amount, phone })) {
+          // Preserve evidence even if other fields contradict the reservation;
+          // support must reconcile this transfer before it can ever be refunded.
+          if (providerTransactionId) {
+            await recordWithdrawTransfer({ userId, orderId: withdrawOrderId, providerTransactionId }).catch(() => false);
+          }
           return {
             status: 502,
             body: {
@@ -240,8 +280,9 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       }
 
       if (sent?.success === false && definiteFailure) {
-        const failureMessage = String(sent.message ?? sent.code ?? "Transfer was rejected");
+        const failureMessage = "The payment service rejected this transfer. Your balance has been returned.";
         const result = await releaseWithdraw({ userId, orderId: withdrawOrderId, message: failureMessage });
+        if (!result.ok || result.state !== "failed") return { status: 202, body: { ok: true, state: "pending", balance: result.balance, orderId: withdrawOrderId, message: "Your withdrawal requires reconciliation. Do not submit it again." } };
         return {
           status: 200,
           body: {
@@ -268,6 +309,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
     }
     return { status: 404, body: { error: "Not found" } };
   } catch (error) {
-    return { status: 500, body: { error: error instanceof Error ? error.message : "Wallet request failed" } };
+    console.error("Wallet request failed", { code: typeof error?.code === "string" ? error.code : "unavailable" });
+    return { status: 500, body: { error: "Wallet request failed. Please check your wallet history before trying again." } };
   }
 }

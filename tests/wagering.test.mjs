@@ -89,7 +89,7 @@ test("a blocked withdrawal reports the remaining amount in Burmese and never sen
     t.after(() => { if (original === undefined) delete process.env[key]; else process.env[key] = original; });
   }
   const payment = t.mock.method(globalThis, "fetch", async () => { throw new Error("Payment must not be called"); });
-  const result = await handleWalletProxy({ req: {}, functionName: "wallet-withdraw", payload: { service_type: "kbzpay", amount: 500, phone: "09123456789", request_id: randomUUID() } });
+  const result = await handleWalletProxy({ req: { method: "POST", headers: { origin: "https://www.j777ml.com", "content-type": "application/json" } }, functionName: "wallet-withdraw", payload: { service_type: "kbzpay", amount: 500, phone: "09123456789", request_id: randomUUID() } });
   assert.equal(result.status, 403);
   assert.equal(result.body.code, "WAGERING_REQUIRED");
   assert.equal(result.body.remaining_wagering, "1000");

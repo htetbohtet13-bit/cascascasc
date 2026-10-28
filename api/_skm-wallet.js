@@ -1,19 +1,6 @@
 import { processSkmWalletCallback } from "../server/skm-wallet.mjs";
 import { signedSkmResponse, verifySkmRequest } from "../server/skm-api.mjs";
-
-const MAX_BODY_BYTES = 128 * 1024;
-
-async function readRawBody(req) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of req) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    size += buffer.length;
-    if (size > MAX_BODY_BYTES) throw new Error("Request body is too large");
-    chunks.push(buffer);
-  }
-  return Buffer.concat(chunks, size);
-}
+import { checkedBody, readRequestBody, RequestBodyError } from "../server/request-body.mjs";
 
 function sendSigned(res, statusCode, body) {
   try {
@@ -46,10 +33,12 @@ export async function handleSkmWallet(req, res, route, providedRawBody) {
 
   let rawBody;
   try {
-    rawBody = providedRawBody ?? await readRawBody(req);
+    rawBody = providedRawBody === undefined ? await readRequestBody(req, { timeoutMs: 4_000, allowParsed: false }) : checkedBody(providedRawBody);
   } catch (error) {
     console.warn("Provider wallet request rejected", error?.message);
-    return sendSigned(res, 413, { status: "ERROR", message: "Request body is too large" });
+    res.setHeader("Connection", "close");
+    const status = error instanceof RequestBodyError ? error.status : 400;
+    return sendSigned(res, status, { status: "ERROR", message: error instanceof RequestBodyError ? error.message : "Could not read request body" });
   }
 
   let verification;

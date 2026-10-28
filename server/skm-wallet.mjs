@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { getPool, withTransaction } from "./neon.mjs";
 import { wageredStake, wageringTracker } from "./wagering.mjs";
+import { addMoney, moneyNumber, subtractMoney } from "./money.mjs";
 
 const CURRENCY = "MMK";
 const MAX_AMOUNT = Number.MAX_SAFE_INTEGER;
@@ -24,9 +25,7 @@ function integerAmount(value, allowZero) {
 
 function safeBalance(value) {
   try {
-    const balance = BigInt(value);
-    if (balance < 0n || balance > BigInt(MAX_AMOUNT)) return null;
-    return Number(balance);
+    return moneyNumber(value);
   } catch {
     return null;
   }
@@ -102,6 +101,9 @@ function validateCurrency(fields) {
 }
 
 function eventFields(payload, kind) {
+  // A rollback has the same reason/amount as its debit. Reject its reference
+  // on the debit route because the provider signs the body, not the URL.
+  if (kind === "DEBIT" && Object.hasOwn(payload, "debit_transaction_id")) return null;
   const common = commonFields(payload);
   const amount = integerAmount(payload.amount, kind === "CREDIT");
   const reason = cleanText(payload.reason, 40);
@@ -128,8 +130,8 @@ async function priorTransaction(client, fields) {
   );
 }
 
-function duplicateResult(row, userId, fields, balance) {
-  if (row.user_id !== userId || row.payload_hash !== digest(fields.rawBody)) {
+function duplicateResult(row, userId, fields, balance, expectedKind) {
+  if (row.kind !== expectedKind || row.user_id !== userId || row.payload_hash !== digest(fields.rawBody)) {
     return response("ERROR", { balance }, { message: "Transaction ID was already used with different details" });
   }
   return response("DUPLICATE", { balance }, { operator_transaction_id: row.id });
@@ -190,7 +192,7 @@ async function debitRequest(payload, rawBody) {
     if (player.is_expired || !player.is_active) return response("TOKEN_EXPIRED", player);
 
     const prior = await priorTransaction(client, fields);
-    if (prior.rowCount) return duplicateResult(prior.rows[0], player.id, fields, player.balance);
+    if (prior.rowCount) return duplicateResult(prior.rows[0], player.id, fields, player.balance, "DEBIT");
     const rolledBackFirst = await client.query(
       `select id from public.skm_wallet_transactions
         where debit_transaction_id = $1 and kind = 'ROLLBACK' and status = 'TOMBSTONE'
@@ -202,7 +204,7 @@ async function debitRequest(payload, rawBody) {
     const balance = safeBalance(player.balance);
     if (balance === null) return response("ERROR", null, { message: "Balance exceeds supported range" });
     if (balance < fields.amount) return response("INSUFFICIENT_FUNDS", player);
-    const nextBalance = balance - fields.amount;
+    const nextBalance = subtractMoney(balance, fields.amount);
     await client.query("update public.profiles set balance = $2 where id = $1::uuid", [player.id, nextBalance]);
     fields.userId = player.id;
     const transactionId = await recordTransaction(client, fields, "DEBIT", "APPLIED", nextBalance);
@@ -223,17 +225,22 @@ async function creditRequest(payload, rawBody) {
     if (!identity.player) return response(identity.error, null);
     const player = identity.player;
     const prior = await priorTransaction(client, fields);
-    if (prior.rowCount) return duplicateResult(prior.rows[0], player.id, fields, player.balance);
+    if (prior.rowCount) return duplicateResult(prior.rows[0], player.id, fields, player.balance, "CREDIT");
 
     const debit = await client.query(
-      `select id, user_id, amount, status
+      `select id, user_id, amount, status, reason, round_id, game_code, currency
          from public.skm_wallet_transactions
-        where transaction_id = $1 and kind = 'DEBIT'
+        where transaction_id = $1 and kind = 'DEBIT' and user_id = $2::uuid
         for update`,
-      [fields.debitTransactionId],
+      [fields.debitTransactionId, player.id],
     );
     if (!debit.rowCount || debit.rows[0].user_id !== player.id || debit.rows[0].status !== "APPLIED") {
       return response("ERROR", player, { message: "Debit transaction is missing or already closed" });
+    }
+    const original = debit.rows[0];
+    if (original.round_id !== fields.roundId || original.game_code !== fields.gameCode || original.currency !== fields.currency ||
+        (original.reason === "BET_HOLD" ? "BET_SETTLE" : "BANK_RETURN") !== fields.reason) {
+      return response("ERROR", player, { message: "Settlement details do not match the debit" });
     }
     const closed = await client.query(
       `select id from public.skm_wallet_transactions
@@ -244,8 +251,9 @@ async function creditRequest(payload, rawBody) {
 
     const balance = safeBalance(player.balance);
     if (balance === null) return response("ERROR", null, { message: "Balance exceeds supported range" });
-    const nextBalance = balance + fields.amount;
-    if (!Number.isSafeInteger(nextBalance)) return response("ERROR", player, { message: "Balance exceeds supported range" });
+    let nextBalance;
+    try { nextBalance = addMoney(balance, fields.amount); }
+    catch { return response("ERROR", player, { message: "Balance exceeds supported range" }); }
     await client.query("update public.profiles set balance = $2 where id = $1::uuid", [player.id, nextBalance]);
     await client.query(
       `update public.skm_wallet_transactions set status = 'SETTLED' where id = $1::uuid`,
@@ -269,7 +277,7 @@ async function rollbackRequest(payload, rawBody) {
     if (!identity.player) return response(identity.error, null);
     const player = identity.player;
     const prior = await priorTransaction(client, fields);
-    if (prior.rowCount) return duplicateResult(prior.rows[0], player.id, fields, player.balance);
+    if (prior.rowCount) return duplicateResult(prior.rows[0], player.id, fields, player.balance, "ROLLBACK");
 
     const closed = await client.query(
       `select id from public.skm_wallet_transactions
@@ -279,7 +287,7 @@ async function rollbackRequest(payload, rawBody) {
     if (closed.rowCount) return response("ERROR", player, { message: "Debit transaction is already closed" });
 
     const debit = await client.query(
-      `select id, user_id, amount, status
+      `select id, user_id, amount, status, reason, round_id, game_code, currency
          from public.skm_wallet_transactions
         where transaction_id = $1 and kind = 'DEBIT'
         for update`,
@@ -287,7 +295,8 @@ async function rollbackRequest(payload, rawBody) {
     );
     if (debit.rowCount && (
       debit.rows[0].user_id !== player.id || debit.rows[0].status !== "APPLIED" ||
-      Number(debit.rows[0].amount) !== fields.amount
+      moneyNumber(debit.rows[0].amount) !== fields.amount || debit.rows[0].reason !== fields.reason ||
+      debit.rows[0].round_id !== fields.roundId || debit.rows[0].game_code !== fields.gameCode || debit.rows[0].currency !== fields.currency
     )) {
       return response("ERROR", player, { message: "Debit transaction cannot be rolled back" });
     }
@@ -296,8 +305,8 @@ async function rollbackRequest(payload, rawBody) {
     if (nextBalance === null) return response("ERROR", null, { message: "Balance exceeds supported range" });
     let status = "TOMBSTONE";
     if (debit.rowCount) {
-      nextBalance += fields.amount;
-      if (!Number.isSafeInteger(nextBalance)) return response("ERROR", player, { message: "Balance exceeds supported range" });
+      try { nextBalance = addMoney(nextBalance, fields.amount); }
+      catch { return response("ERROR", player, { message: "Balance exceeds supported range" }); }
       await client.query("update public.profiles set balance = $2 where id = $1::uuid", [player.id, nextBalance]);
       await client.query(
         "update public.skm_wallet_transactions set status = 'ROLLED_BACK' where id = $1::uuid",

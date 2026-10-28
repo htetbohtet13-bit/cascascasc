@@ -15,6 +15,20 @@ export type WalletHistoryItem = {
   completed_at: string | null;
 };
 
+function paymentErrorMessage(message?: string) {
+  if (message && /[\u1000-\u109f]/.test(message)) return message;
+  const text = (message ?? "").toLowerCase();
+  if (text.includes("too many")) return "အကြိမ်များစွာ စစ်ဆေးထားပါသည်။ ခဏစောင့်ပြီး ပြန်လည်ကြိုးစားပါ။";
+  if (text.includes("temporarily unavailable")) return "ငွေပေးချေမှုကို ယာယီစစ်ဆေး၍ မရသေးပါ။ ခဏစောင့်ပြီး ပြန်လည်ကြိုးစားပါ။";
+  if (text.includes("not authenticated")) return "အကောင့်သို့ ပြန်လည်ဝင်ရောက်ပါ။";
+  if (text.includes("last 6")) return "ငွေလွှဲနံပါတ်၏ နောက်ဆုံး ၆ လုံးကို ထည့်ပါ။";
+  if (text.includes("already been added") || text.includes("already used")) return "ဤငွေလွှဲမှုကို အသုံးပြုပြီးဖြစ်ပါသည်။";
+  if (text.includes("not found") || text.includes("do not match")) return "ငွေလွှဲမှုအချက်အလက်များ မကိုက်ညီပါ။ ပြေစာကို စစ်ဆေးပြီး ပြန်လည်ကြိုးစားပါ။";
+  if (text.includes("choose kbzpay")) return "KBZPay သို့မဟုတ် WavePay ကို ရွေးပါ။";
+  if (text.includes("enter an amount")) return "ငွေပမာဏကို မှန်ကန်စွာ ထည့်ပါ။";
+  return "ငွေပေးချေမှုကို အတည်မပြုနိုင်ပါ။ ပြေစာကို စစ်ဆေးပါ သို့မဟုတ် အကူအညီဌာနသို့ ဆက်သွယ်ပါ။";
+}
+
 async function walletRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -27,7 +41,7 @@ async function walletRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const payload = (await response.json()) as T & { error?: string };
   if (!response.ok || (payload && typeof payload === "object" && "error" in payload && payload.error)) {
     throw new Error(
-      (payload && typeof payload === "object" && payload.error) || "Request failed",
+      paymentErrorMessage((payload && typeof payload === "object" && payload.error) || undefined),
     );
   }
   return payload;
@@ -42,8 +56,8 @@ export async function loadWalletHistory() {
   return payload.history;
 }
 
-export function submitDeposit(serviceType: PayMethod, amount: number, transactionId: string) {
-  return walletRequest<{ ok: boolean; balance: number; message: string }>("/api/wallet/deposit", {
+export async function submitDeposit(serviceType: PayMethod, amount: number, transactionId: string) {
+  const result = await walletRequest<{ ok: boolean; balance: number; message: string }>("/api/wallet/deposit", {
     method: "POST",
     body: JSON.stringify({
       service_type: serviceType,
@@ -51,6 +65,7 @@ export function submitDeposit(serviceType: PayMethod, amount: number, transactio
       transaction_id: transactionId,
     }),
   });
+  return { ...result, message: "ငွေဖြည့်သွင်းပြီးပါပြီ။" };
 }
 
 export type WithdrawResult = {
@@ -74,6 +89,7 @@ export class WalletRequestError extends Error {
 function withdrawErrorMessage(message?: string) {
   if (message && /[\u1000-\u109f]/.test(message)) return message;
   const text = (message ?? "").toLowerCase();
+  if (text.includes("too many") || text.includes("temporarily unavailable")) return paymentErrorMessage(message);
   if (text.includes("not authenticated")) return "အကောင့်သို့ ပြန်လည်ဝင်ရောက်ပါ။";
   if (text.includes("not enough balance")) return "လက်ကျန်ငွေ မလုံလောက်ပါ။";
   if (text.includes("beginning with 09")) return "09 ဖြင့်စသော KBZPay သို့မဟုတ် WavePay ဖုန်းနံပါတ်ကို မှန်ကန်စွာ ထည့်ပါ။";

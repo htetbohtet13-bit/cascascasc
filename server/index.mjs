@@ -1,8 +1,11 @@
 import http from "node:http";
-import { currentSession } from "./auth.mjs";
-import { gameLoginFailure, handleGameLogin } from "./game-login.mjs";
-import { handleWalletProxy } from "./wallet-proxy.mjs";
 import { handleSkmWallet } from "../api/_skm-wallet.js";
+import gameLoginHandler from "../api/game-login.js";
+import walletConfigHandler from "../api/wallet/config.js";
+import walletDepositHandler from "../api/wallet/deposit.js";
+import walletWithdrawHandler from "../api/wallet/withdraw.js";
+import { handleWalletProxy } from "./wallet-proxy.mjs";
+import { readJsonBody, sendBodyError } from "./request-body.mjs";
 import meHandler from "../api/me.js";
 import betsHandler from "../api/profile/bets.js";
 import authRequestHandler from "../api/auth/[...all].js";
@@ -20,29 +23,15 @@ function adaptResponse(res) {
   return res;
 }
 
-async function readBody(req) {
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const text = Buffer.concat(chunks).toString("utf8");
-  if (!text) return {};
-  const contentType = String(req.headers["content-type"] ?? "").toLowerCase();
-  if (contentType.includes("application/x-www-form-urlencoded")) {
-    return Object.fromEntries(new URLSearchParams(text));
-  }
-  try { return JSON.parse(text); } catch { return {}; }
-}
-
-async function readRawBody(req) {
-  const chunks = [];
-  for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  return Buffer.concat(chunks);
-}
-
 const server = http.createServer(async (req, rawRes) => {
   const res = adaptResponse(rawRes);
-  const path = new URL(req.url ?? "/", "http://localhost").pathname;
-
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Content-Security-Policy", "frame-ancestors 'none'");
   try {
+    const path = new URL(req.url ?? "/", "http://localhost").pathname;
     const walletRoutes = {
       "/balance": "balance",
       "/debit": "debit",
@@ -54,11 +43,10 @@ const server = http.createServer(async (req, rawRes) => {
       "/api/provider-wallet/rollback": "rollback",
     };
     if (walletRoutes[path]) {
-      const rawBody = req.method === "POST" ? await readRawBody(req) : Buffer.alloc(0);
-      return handleSkmWallet(req, res, walletRoutes[path], rawBody);
+      return handleSkmWallet(req, res, walletRoutes[path]);
     }
     if (req.method === "OPTIONS") return res.status(204).end();
-    if (req.method === "POST" || req.method === "PUT") req.body = await readBody(req);
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) req.body = await readJsonBody(req);
     if (path.startsWith("/api/auth/")) return authRequestHandler(req, res);
     if (path === "/api/me") return meHandler(req, res);
     if (path === "/api/profile/bets") return betsHandler(req, res);
@@ -74,28 +62,28 @@ const server = http.createServer(async (req, rawRes) => {
       for (const [name, value] of Object.entries(result.headers ?? {})) res.setHeader(name, value);
       return res.status(result.status).json(result.body);
     }
-    if (path === "/api/game-login") {
-      try {
-        const session = await currentSession(req);
-        const result = await handleGameLogin({ ...req.body, userId: session?.user?.id });
-        return res.status(result.status).json(result.body);
-      } catch (error) {
-        console.error("Game login failed", error);
-        const result = gameLoginFailure(error);
-        return res.status(result.status).json(result.body);
-      }
-    }
+    if (path === "/api/game-login") return gameLoginHandler(req, res);
     if (path.startsWith("/api/wallet/")) {
-      const functionName = { config: "wallet-config", deposit: "wallet-deposit", withdraw: "wallet-withdraw", history: "wallet-history" }[path.split("/").at(-1)];
+      if (path === "/api/wallet/config") return walletConfigHandler(req, res);
+      if (path === "/api/wallet/deposit") return walletDepositHandler(req, res);
+      if (path === "/api/wallet/withdraw") return walletWithdrawHandler(req, res);
+      const functionName = path === "/api/wallet/history" ? "wallet-history" : null;
       if (!functionName) return res.status(404).json({ error: "Not found" });
+      if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
       const result = await handleWalletProxy({ req, functionName, method: req.method, payload: req.body });
+      for (const [name, value] of Object.entries(result.headers ?? {})) res.setHeader(name, value);
       return res.status(result.status).json(result.body);
     }
     return res.status(404).json({ error: "Not found" });
   } catch (error) {
+    if (sendBodyError(res, error)) return;
     console.error("API request failed", error);
     return res.status(500).json({ error: "Request failed" });
   }
 });
+server.headersTimeout = 10_000;
+server.requestTimeout = 15_000;
+server.maxHeadersCount = 50;
+server.keepAliveTimeout = 5_000;
 
 server.listen(port, () => console.log(`Neon API listening on http://localhost:${port}`));

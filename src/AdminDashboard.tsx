@@ -146,15 +146,21 @@ export default function AdminDashboard() {
   }
 
   async function logout() {
-    await fetch("/api/admin", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "logout" }),
-    }).catch(() => {});
-    setData({});
-    setLoginPassword("");
-    setAuthCode(401);
+    setError("");
+    try {
+      const response = await fetch("/api/admin", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "logout" }),
+      });
+      if (!response.ok) throw new Error("Could not sign out");
+      setData({});
+      setLoginPassword("");
+      setAuthCode(401);
+    } catch {
+      setError("Could not confirm sign-out. Please try again.");
+    }
   }
 
   const total = data.total ?? 0;

@@ -2,6 +2,8 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import { getPool } from "./neon.mjs";
 import { listProviderGames } from "./skm-api.mjs";
 import { applyGameDisplaySettings } from "./game-display.mjs";
+import { unsafeRequestError } from "./request-security.mjs";
+import { consumeRateLimit } from "./rate-limit.mjs";
 
 const PAGE_SIZE = 50;
 const MAX_PAGE = 1_000_000;
@@ -27,15 +29,25 @@ function tokenSignature(payload, secret) {
   return createHmac("sha256", secret).update(payload).digest("hex");
 }
 
-function createAdminSession(secret) {
+function sessionHash(token) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+async function createAdminSession(secret) {
   const payload = `${Math.floor(Date.now() / 1000)}.${randomBytes(18).toString("hex")}`;
   const token = `${payload}.${tokenSignature(payload, secret)}`;
+  await getPool().query(
+    `insert into public.auth_admin_sessions (token_hash, expires_at)
+     values ($1, now() + ($2 * interval '1 second'))`,
+    [sessionHash(token), ADMIN_SESSION_SECONDS],
+  );
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
   return `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/api/admin; HttpOnly; SameSite=Strict; Max-Age=${ADMIN_SESSION_SECONDS}${secure}`;
 }
 
-function validAdminSession(req, secret) {
-  const parts = cookieValue(req, ADMIN_SESSION_COOKIE).split(".");
+async function validAdminSession(req, secret) {
+  const token = cookieValue(req, ADMIN_SESSION_COOKIE);
+  const parts = token.split(".");
   if (parts.length !== 3 || !/^\d+$/.test(parts[0]) || !/^[0-9a-f]{36}$/.test(parts[1]) || !/^[0-9a-f]{64}$/.test(parts[2])) return false;
   const issuedAt = Number(parts[0]);
   const now = Math.floor(Date.now() / 1000);
@@ -43,7 +55,12 @@ function validAdminSession(req, secret) {
   const payload = `${parts[0]}.${parts[1]}`;
   const expected = Buffer.from(tokenSignature(payload, secret), "hex");
   const actual = Buffer.from(parts[2], "hex");
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return false;
+  const result = await getPool().query(
+    "select 1 from public.auth_admin_sessions where token_hash = $1 and expires_at > now()",
+    [sessionHash(token)],
+  );
+  return result.rows.length > 0;
 }
 
 function passwordsMatch(attempt, secret) {
@@ -162,17 +179,6 @@ async function setGameHot(body) {
     throw error;
   }
   return { status: 200, body: { ok: true, game_code: gameCode, is_hot: body.is_hot } };
-}
-
-function sameOrigin(req) {
-  const origin = req.headers?.origin;
-  const host = req.headers?.host;
-  if (!origin || !host) return true;
-  try {
-    return new URL(origin).host === host;
-  } catch {
-    return false;
-  }
 }
 
 function pageParams(url) {
@@ -306,6 +312,17 @@ async function userDetails(pool, userId) {
 }
 
 export async function handleAdminApi(req) {
+  const requestError = unsafeRequestError(req);
+  if (requestError) return requestError;
+  try {
+    return await adminRequest(req);
+  } catch (error) {
+    console.error("Admin session storage unavailable", { code: error?.code ?? "unavailable" });
+    return { status: 503, headers: { "Retry-After": "60" }, body: { error: "Administration is temporarily unavailable. Please try again later." } };
+  }
+}
+
+async function adminRequest(req) {
   const url = new URL(req.url ?? "/api/admin", "http://localhost");
   const secret = adminSecret();
   if (Buffer.byteLength(secret, "utf8") < 16) {
@@ -313,14 +330,17 @@ export async function handleAdminApi(req) {
   }
 
   if (req.method === "POST") {
-    if (!sameOrigin(req)) return { status: 403, body: { error: "Request origin is not allowed" } };
     const action = req.body?.action;
     if (action === "login") {
-      const attempt = typeof req.body?.password === "string" ? req.body.password.slice(0, 4096) : "";
+      const limited = await consumeRateLimit(req, "admin-login");
+      if (limited) return limited;
+      const attempt = typeof req.body?.password === "string" && req.body.password.length <= 4096 ? req.body.password : "";
       if (!passwordsMatch(attempt, secret)) return { status: 401, body: { error: "Password is incorrect" } };
-      return { status: 200, headers: { "Set-Cookie": createAdminSession(secret) }, body: { ok: true } };
+      return { status: 200, headers: { "Set-Cookie": await createAdminSession(secret) }, body: { ok: true } };
     }
     if (action === "logout") {
+      const token = cookieValue(req, ADMIN_SESSION_COOKIE);
+      if (token) await getPool().query("delete from public.auth_admin_sessions where token_hash = $1", [sessionHash(token)]);
       const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
       return {
         status: 200,
@@ -328,14 +348,14 @@ export async function handleAdminApi(req) {
         body: { ok: true },
       };
     }
-    if (!validAdminSession(req, secret)) return { status: 401, body: { error: "Enter the admin password to continue" } };
+    if (!await validAdminSession(req, secret)) return { status: 401, body: { error: "Enter the admin password to continue" } };
     if (action === "save_game_settings") return await saveGameSettings(req.body);
     if (action === "set_game_visibility") return await setGameVisibility(req.body);
     if (action === "set_game_hot") return await setGameHot(req.body);
     return { status: 400, body: { error: "Unknown admin action" } };
   }
   if (req.method !== "GET") return { status: 405, body: { error: "Method not allowed" } };
-  if (!validAdminSession(req, secret)) return { status: 401, body: { error: "Enter the admin password to continue" } };
+  if (!await validAdminSession(req, secret)) return { status: 401, body: { error: "Enter the admin password to continue" } };
 
   const view = url.searchParams.get("view") || "overview";
   const pool = getPool();

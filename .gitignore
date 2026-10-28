@@ -1,7 +1,11 @@
 node_modules
 dist
-.env
-.env.local
+.env*
+!.env.example
+*.pem
+*.p12
+*.key
+/SECURITY_REVIEW.local.md
 *.log
 .DS_Store
 _preset_src

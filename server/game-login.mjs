@@ -3,6 +3,16 @@ import { callSkmApi, listProviderGames, SkmApiError } from "./skm-api.mjs";
 
 const CURRENCY = "MMK";
 
+export function validGameLaunchUrl(value) {
+  if (typeof value !== "string" || value.length > 8192 || /[\s\x00-\x1f\x7f]/.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
 export function gameLoginFailure(error) {
   if (error instanceof SkmApiError) {
     if (error.code === "CONFIG_MISSING" || error.code === "CONFIG_INVALID") {
@@ -25,7 +35,7 @@ export function gameLoginFailure(error) {
 
 export async function handleGameLogin({ userId, gameCode, tableId, device = "mobile" }) {
   if (!userId) return { status: 401, body: { error: "Not authenticated" } };
-  if (typeof gameCode !== "string" || !/^[a-z0-9]+$/.test(gameCode)) {
+  if (typeof gameCode !== "string" || gameCode.length > 80 || !/^[a-z0-9]+$/.test(gameCode)) {
     return { status: 400, body: { error: "Choose a valid game" } };
   }
   if (tableId != null && (typeof tableId !== "string" || tableId.length > 160)) {
@@ -57,7 +67,7 @@ export async function handleGameLogin({ userId, gameCode, tableId, device = "mob
     device: device === "desktop" ? "desktop" : "mobile",
   };
   const providerResult = await callSkmApi("game/launch", { method: "POST", payload });
-  if (typeof providerResult?.url !== "string" || !providerResult.url.startsWith("https://")) {
+  if (!validGameLaunchUrl(providerResult?.url)) {
     throw new SkmApiError("Provider returned an invalid game URL", { status: 502, code: "INVALID_RESPONSE" });
   }
   return { status: 200, body: { url: providerResult.url } };

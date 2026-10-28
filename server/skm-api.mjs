@@ -1,5 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+const MAX_RESPONSE_BYTES = 128 * 1024;
+let warnedHttpGateway = false;
+
 export class SkmApiError extends Error {
   constructor(message, { status = 502, code = "PROVIDER_ERROR" } = {}) {
     super(message);
@@ -22,7 +25,7 @@ export function skmConfig() {
   } catch {
     throw new SkmApiError("Provider API base URL is invalid", { status: 503, code: "CONFIG_INVALID" });
   }
-  if (parsed.protocol !== "https:") {
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash || /[\s\x00-\x1f\x7f]/.test(apiBaseUrl)) {
     throw new SkmApiError("Provider API base URL must use HTTPS", { status: 503, code: "CONFIG_INVALID" });
   }
   return { apiBaseUrl, operatorCode, secret };
@@ -40,8 +43,17 @@ function gatewayConfig() {
   } catch {
     throw new SkmApiError("Gateway URL is invalid", { status: 503, code: "CONFIG_INVALID" });
   }
-  if (parsedGateway.protocol !== "https:" && parsedGateway.protocol !== "http:") {
+  if (!["https:", "http:"].includes(parsedGateway.protocol) || parsedGateway.username || parsedGateway.password || parsedGateway.search || parsedGateway.hash || /[\s\x00-\x1f\x7f]/.test(gatewayUrl)) {
     throw new SkmApiError("Gateway URL must use HTTP or HTTPS", { status: 503, code: "CONFIG_INVALID" });
+  }
+  if (parsedGateway.protocol === "http:") {
+    if (String(process.env.GATEWAY_REQUIRE_HTTPS ?? "").toLowerCase() === "true") {
+      throw new SkmApiError("Gateway HTTPS is required", { status: 503, code: "CONFIG_INVALID" });
+    }
+    if (!warnedHttpGateway) {
+      warnedHttpGateway = true;
+      console.warn("Gateway uses cleartext HTTP. Complete the gateway TLS deployment and enable GATEWAY_REQUIRE_HTTPS.");
+    }
   }
   const gatewayPath = parsedGateway.pathname.replace(/\/+$/, "");
   parsedGateway.pathname = gatewayPath.endsWith("/proxy") ? gatewayPath : `${gatewayPath}/proxy`;
@@ -106,6 +118,7 @@ export async function callSkmApi(path, { method = "GET", payload } = {}) {
   };
   const response = await fetch(gatewayUrl, {
     method: "POST",
+    redirect: "error",
     headers: {
       "Content-Type": "application/json",
       "X-Gateway-Secret": gatewaySecret,
@@ -119,7 +132,7 @@ export async function callSkmApi(path, { method = "GET", payload } = {}) {
     }),
     signal: AbortSignal.timeout(15_000),
   });
-  const text = await response.text();
+  const text = await readProviderResponse(response);
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { /* preserve a safe generic provider error */ }
   if (!response.ok) {
@@ -134,16 +147,60 @@ export async function callSkmApi(path, { method = "GET", payload } = {}) {
   return data;
 }
 
+async function readProviderResponse(response) {
+  const length = response.headers.get("content-length");
+  if (length !== null && Number(length) > MAX_RESPONSE_BYTES) {
+    await response.body?.cancel();
+    throw new SkmApiError("Provider response is too large", { code: "INVALID_RESPONSE" });
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new SkmApiError("Provider response is too large", { code: "INVALID_RESPONSE" });
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks, size).toString("utf8");
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 let gamesCache;
 let gamesCacheAt = 0;
+let gamesRequest;
+let gamesError;
+let gamesErrorAt = 0;
 
 export async function listProviderGames({ refresh = false } = {}) {
   if (!refresh && gamesCache && Date.now() - gamesCacheAt < 30_000) return gamesCache;
-  const payload = await callSkmApi("games");
-  if (!Array.isArray(payload?.games)) {
-    throw new SkmApiError("Provider returned an invalid game list", { status: 502, code: "INVALID_RESPONSE" });
-  }
-  gamesCache = payload.games;
-  gamesCacheAt = Date.now();
-  return gamesCache;
+  if (gamesRequest) return gamesRequest;
+  if (gamesError && Date.now() - gamesErrorAt < 2_000) throw gamesError;
+  gamesRequest = (async () => {
+    try {
+      const payload = await callSkmApi("games");
+      if (!Array.isArray(payload?.games)) {
+        throw new SkmApiError("Provider returned an invalid game list", { status: 502, code: "INVALID_RESPONSE" });
+      }
+      gamesCache = payload.games;
+      gamesCacheAt = Date.now();
+      gamesError = undefined;
+      return gamesCache;
+    } catch (error) {
+      gamesError = error;
+      gamesErrorAt = Date.now();
+      throw error;
+    } finally {
+      gamesRequest = undefined;
+    }
+  })();
+  return gamesRequest;
 }

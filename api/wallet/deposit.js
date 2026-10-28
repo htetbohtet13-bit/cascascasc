@@ -1,26 +1,15 @@
 import { handleWalletProxy } from "../../server/wallet-proxy.mjs";
+import { unsafeRequestError } from "../../server/request-security.mjs";
+import { readJsonBody, sendBodyError } from "../../server/request-body.mjs";
 
 export const config = {
   maxDuration: 40,
+  api: { bodyParser: false },
 };
 
-function jsonBody(req) {
-  if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) return req.body;
-  if (typeof req.body === "string" && req.body) {
-    try {
-      return JSON.parse(req.body);
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
-
 export default async function handler(req, res) {
+  res.setHeader("Cache-Control", "private, no-store");
   if (req.method === "OPTIONS") {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");
     res.status(204).end();
     return;
   }
@@ -29,13 +18,20 @@ export default async function handler(req, res) {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
-
-  const result = await handleWalletProxy({
-    req,
-    functionName: "wallet-deposit",
-    payload: jsonBody(req),
-  });
-
-  res.status(result.status).json(result.body);
+  const denied = unsafeRequestError(req);
+  if (denied) return res.status(denied.status).json(denied.body);
+  try {
+    const result = await handleWalletProxy({
+      req,
+      functionName: "wallet-deposit",
+      payload: await readJsonBody(req),
+    });
+    for (const [name, value] of Object.entries(result.headers ?? {})) res.setHeader(name, value);
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    if (sendBodyError(res, error)) return;
+    console.error("Wallet deposit failed", error?.name);
+    return res.status(500).json({ error: "Wallet request failed" });
+  }
 }
 

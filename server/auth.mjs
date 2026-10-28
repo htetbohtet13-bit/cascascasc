@@ -6,11 +6,25 @@ import { normalizePhone } from "./phone.mjs";
 const scrypt = promisify(scryptCallback);
 const SESSION_COOKIE = "casino_session";
 const SESSION_DAYS = 30;
+const AUTH_FAILURE = "Phone number or password is incorrect";
+const DUMMY_SALT = Buffer.alloc(16, 0);
+
+export class AuthError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
 
 function cookieToken(req) {
-  const header = req.headers?.cookie ?? "";
+  const header = String(req.headers?.cookie ?? "");
   const entry = header.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${SESSION_COOKIE}=`));
-  return entry ? decodeURIComponent(entry.slice(SESSION_COOKIE.length + 1)) : "";
+  try {
+    const token = entry ? decodeURIComponent(entry.slice(SESSION_COOKIE.length + 1)) : "";
+    return /^[A-Za-z0-9_-]{43}$/.test(token) ? token : "";
+  } catch {
+    return "";
+  }
 }
 
 function tokenHash(token) {
@@ -54,9 +68,9 @@ export async function currentSession(req) {
 
 export async function signUpPhone(phoneInput, password) {
   const phone = normalizePhone(phoneInput);
-  if (!phone) throw new Error("Enter a valid phone number");
-  if (typeof password !== "string" || password.length < 6 || password.length > 128) {
-    throw new Error("Password must be at least 6 characters");
+  if (!phone) throw new AuthError("Enter a valid phone number");
+  if (typeof password !== "string" || password.length < 8 || password.length > 128) {
+    throw new AuthError("Password must be between 8 and 128 characters");
   }
   const userId = randomUUID();
   const salt = randomBytes(16);
@@ -72,7 +86,7 @@ export async function signUpPhone(phoneInput, password) {
       );
     });
   } catch (error) {
-    if (error?.code === "23505") throw new Error("Phone number is already registered");
+    if (error?.code === "23505") throw new AuthError("Could not create account. Try signing in or use another phone number.", 409);
     throw error;
   }
 
@@ -81,7 +95,9 @@ export async function signUpPhone(phoneInput, password) {
 
 export async function signInPhone(phoneInput, password) {
   const phone = normalizePhone(phoneInput);
-  if (!phone || typeof password !== "string") throw new Error("Phone number or password is incorrect");
+  // Existing six-character passwords remain usable; only new accounts use the
+  // stronger minimum. Never hash unbounded attacker-controlled password input.
+  if (!phone || typeof password !== "string" || !password.length || password.length > 128) throw new AuthError(AUTH_FAILURE, 401);
   const result = await getPool().query(
     `select p.id, p.phone, c.password_hash
        from public.profiles p join public.auth_credentials c on c.user_id = p.id
@@ -89,13 +105,13 @@ export async function signInPhone(phoneInput, password) {
     [phone],
   );
   const user = result.rows[0];
-  if (!user) throw new Error("Phone number or password is incorrect");
-  const [algorithm, saltHex, hashHex] = user.password_hash.split("$");
-  if (algorithm !== "scrypt") throw new Error("Phone number or password is incorrect");
-  const expected = Buffer.from(hashHex, "hex");
-  const actual = Buffer.from(await scrypt(password, Buffer.from(saltHex, "hex"), expected.length));
-  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
-    throw new Error("Phone number or password is incorrect");
+  const stored = /^scrypt\$([0-9a-f]{32})\$([0-9a-f]{128})$/.exec(String(user?.password_hash ?? ""));
+  const expected = stored ? Buffer.from(stored[2], "hex") : Buffer.alloc(64);
+  const actual = Buffer.from(await scrypt(password, stored ? Buffer.from(stored[1], "hex") : DUMMY_SALT, 64));
+  // Missing accounts still perform the same password work to remove the easy
+  // timing oracle. The API rate limit runs before this expensive operation.
+  if (!timingSafeEqual(actual, expected) || !user || !stored) {
+    throw new AuthError(AUTH_FAILURE, 401);
   }
   return {
     cookie: await createSession(user.id),
