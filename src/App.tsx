@@ -643,6 +643,14 @@ export default function App() {
             </div>
           ) : null}
 
+          {playing ? (
+            <div className="game-launch-loading" role="status" aria-live="polite">
+              <span className="game-launch-spinner" aria-hidden="true" />
+              <strong>ဂိမ်းဖွင့်နေပါသည်</strong>
+              <span>ခဏစောင့်ပေးပါ…</span>
+            </div>
+          ) : null}
+
           <nav className={`bottom-navigation${walletOpen ? " hidden" : ""}`}>
             {(
               [
