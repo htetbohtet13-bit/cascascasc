@@ -9,7 +9,7 @@ User=j777-gateway
 Group=j777-gateway
 EnvironmentFile=/etc/j777-gateway.env
 Environment=PORT=3001
-Environment=PROVIDER_API_HOST=shan-24.chapm382.com
+Environment=PROVIDER_API_HOST=skm.african-buffalo.net
 ExecStart=/usr/bin/python3 /opt/j777-gateway/proxy.py
 Restart=on-failure
 RestartSec=3
