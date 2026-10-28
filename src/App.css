@@ -2605,6 +2605,12 @@
   line-height: 1.5;
 }
 
+.withdraw-wagering-error { display: grid; justify-items: center; gap: 14px; padding: 28px 4px; text-align: center; }
+.withdraw-wagering-mark { display: grid; width: 56px; height: 56px; place-items: center; border-radius: 50%; background: #fff0df; color: #a76516; }
+.withdraw-wagering-error h3 { margin: 0; color: var(--ui-ink); font-size: 18px; line-height: 1.6; }
+.withdraw-wagering-error p { margin: 0 0 8px; color: var(--ui-muted); font-size: 14px; line-height: 1.9; }
+.withdraw-wagering-error .primary-btn { width: 100%; }
+
 .wallet-sheet {
   background: var(--ui-page);
   color: var(--ui-ink);

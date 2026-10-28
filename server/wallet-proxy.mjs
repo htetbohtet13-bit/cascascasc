@@ -130,7 +130,10 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       if (!config.apiKey || !sender) return { status: 500, body: { error: "Payment is not configured" } };
       const withdrawOrderId = `WD${requestId.replaceAll("-", "")}`;
       const reserved = await reserveWithdraw({ userId, orderId: withdrawOrderId, serviceType, amount, phone });
-      if (!reserved.ok) return { status: 400, body: { error: reserved.message } };
+      if (!reserved.ok) return {
+        status: reserved.code === "WAGERING_REQUIRED" ? 403 : 400,
+        body: { error: reserved.message, code: reserved.code, remaining_wagering: reserved.remainingWagering },
+      };
       if (reserved.state === "paid") return { status: 200, body: reserved };
       if (reserved.state === "pending") return { status: 202, body: reserved };
 

@@ -1,5 +1,6 @@
 import { getPool, withTransaction } from "./neon.mjs";
 import { paymentConfig } from "./payment-env.mjs";
+import { wageringMessage, wageringTracker } from "./wagering.mjs";
 
 export function walletMethods() {
   const config = paymentConfig();
@@ -61,6 +62,8 @@ export async function applyVerifiedDeposit({
     );
     if (!profile.rowCount) return { ok: false, message: "Profile not found" };
 
+    const wagering = await wageringTracker(client, userId);
+    await wagering.resetIfEmpty(profile.rows[0].balance, `deposit:${orderId}`);
     const balance = Number(profile.rows[0].balance) + amount;
     await client.query(
       "update public.profiles set balance = $2 where id = $1::uuid",
@@ -72,6 +75,7 @@ export async function applyVerifiedDeposit({
        values ($1::uuid, $2, $3, $4, $5, nullif($6, ''), nullif($7, ''), 'verified', 'success', now())`,
       [userId, serviceType, orderId, amount, transactionId, providerTransactionId, depositToken],
     );
+    await wagering.addDeposit(amount, orderId);
     return { ok: true, balance, message: "Deposit added" };
   });
 }
@@ -149,6 +153,17 @@ export async function reserveWithdraw({ userId, orderId, serviceType, amount, ph
 
     const currentBalance = Number(profile.rows[0].balance);
     if (currentBalance < amount) return { ok: false, message: "Not enough balance" };
+
+    const wagering = await wageringTracker(client, userId);
+    const remaining = await wagering.remaining();
+    if (remaining > 0n) {
+      return {
+        ok: false,
+        code: "WAGERING_REQUIRED",
+        remainingWagering: remaining.toString(),
+        message: wageringMessage(remaining),
+      };
+    }
 
     const balance = currentBalance - amount;
     await client.query(

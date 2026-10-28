@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { loadWalletMethods, submitWithdraw, type PayMethod } from "./lib/wallet";
+import { loadWalletMethods, submitWithdraw, WalletRequestError, type PayMethod } from "./lib/wallet";
 
 type Props = {
   embedded?: boolean;
@@ -29,13 +29,14 @@ export default function Wallet({
   const [phone, setPhone] = useState(defaultPhone.replace(/^\+95/, "0"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [wageringError, setWageringError] = useState("");
   const [done, setDone] = useState("");
   const [doneState, setDoneState] = useState<"paid" | "pending" | "failed">("paid");
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
-    loadWalletMethods().catch((err) =>
-      setError(err instanceof Error ? err.message : "ငွေပေးချေမှုနည်းလမ်းများကို ဖွင့်မရပါ"),
+    loadWalletMethods().catch(() =>
+      setError("ငွေပေးချေမှုနည်းလမ်းများကို ဖွင့်မရပါ။ ခဏစောင့်ပြီး ပြန်လည်ကြိုးစားပါ။"),
     );
   }, []);
 
@@ -58,7 +59,12 @@ export default function Wallet({
       if (result.state === "failed") setRequestId(crypto.randomUUID());
       setStep(4);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not complete the request");
+      if (err instanceof WalletRequestError && err.code === "WAGERING_REQUIRED") {
+        setWageringError(err.message);
+        setStep(5);
+      } else {
+        setError(err instanceof WalletRequestError ? err.message : "ငွေထုတ်ခြင်း မအောင်မြင်ပါ။ ပြန်လည်ကြိုးစားပါ။");
+      }
     } finally {
       setBusy(false);
     }
@@ -68,7 +74,7 @@ export default function Wallet({
       <section className={`wallet-sheet${embedded ? " wallet-embedded" : ""}`}>
       {!embedded ? <div className="wallet-head">
         <h2>ငွေထုတ်</h2>
-        <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label="Close">
+        <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label="ပိတ်မည်">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
@@ -77,11 +83,11 @@ export default function Wallet({
       </div> : null}
 
       <div className="wallet-body">
-        {step !== 4 ? (
+        {step !== 4 && step !== 5 ? (
           <>
             <div className="avail-card">
               <small>လက်ရှိလက်ကျန်</small>
-              <strong>{balance.toLocaleString("en-US")} <span>Ks</span></strong>
+              <strong>{balance.toLocaleString("my-MM")} <span>ကျပ်</span></strong>
             </div>
             <p className="wallet-title">ငွေလက်ခံမည့်ဘဏ်</p>
             <div className="bank-grid">
@@ -127,13 +133,13 @@ export default function Wallet({
                   placeholder="0"
                   required
                 />
-                <span>Ks</span>
+                <span>ကျပ်</span>
               </div>
             </label>
             <div className="quick-row">
               {quickAmounts.map((value) => (
                 <button key={value} type="button" onClick={() => setAmount(value)}>
-                  {Number(value).toLocaleString("en-US")}
+                  {Number(value).toLocaleString("my-MM")}
                 </button>
               ))}
             </div>
@@ -172,13 +178,26 @@ export default function Wallet({
                   setStep(1);
                 }}
               >
-                Try again
+                ပြန်လည်ကြိုးစားမည်
               </button>
             ) : (
               <button type="button" className="primary-btn" onClick={onClose}>
-                Done
+                ပြီးပါပြီ
               </button>
             )}
+          </div>
+        ) : null}
+
+        {step === 5 ? (
+          <div className="withdraw-wagering-error" role="alert">
+            <span className="withdraw-wagering-mark" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <circle cx="12" cy="12" r="9" /><path d="M12 7v6m0 4h.01" />
+              </svg>
+            </span>
+            <h3>ငွေထုတ်၍ မရသေးပါ</h3>
+            <p>{wageringError}</p>
+            <button type="button" className="primary-btn" onClick={onClose}>ဂိမ်းဆက်ကစားမည်</button>
           </div>
         ) : null}
       </div>

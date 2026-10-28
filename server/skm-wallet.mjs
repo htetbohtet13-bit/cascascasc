@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { getPool, withTransaction } from "./neon.mjs";
+import { wageredStake, wageringTracker } from "./wagering.mjs";
 
 const CURRENCY = "MMK";
 const MAX_AMOUNT = Number.MAX_SAFE_INTEGER;
@@ -175,6 +176,12 @@ async function balanceRequest(payload) {
 async function debitRequest(payload, rawBody) {
   const fields = eventFields(payload, "DEBIT");
   if (!fields) return response("ERROR", null, { message: "Invalid debit request" });
+  let stake;
+  try {
+    stake = wageredStake({ ...payload, game_code: fields.gameCode, reason: fields.reason, amount: fields.amount });
+  } catch {
+    return response("ERROR", null, { message: "Invalid wager stake" });
+  }
   fields.rawBody = rawBody;
   return withTransaction(async (client) => {
     const identity = await findPlayer(client, fields, { requireActive: true, lock: true });
@@ -199,6 +206,10 @@ async function debitRequest(payload, rawBody) {
     await client.query("update public.profiles set balance = $2 where id = $1::uuid", [player.id, nextBalance]);
     fields.userId = player.id;
     const transactionId = await recordTransaction(client, fields, "DEBIT", "APPLIED", nextBalance);
+    if (stake > 0) {
+      const wagering = await wageringTracker(client, player.id);
+      await wagering.addBet(stake, fields.transactionId);
+    }
     return response("OK", { balance: nextBalance }, { operator_transaction_id: transactionId });
   });
 }
@@ -242,6 +253,9 @@ async function creditRequest(payload, rawBody) {
     );
     fields.userId = player.id;
     const transactionId = await recordTransaction(client, fields, "CREDIT", "APPLIED", nextBalance);
+    const wagering = await wageringTracker(client, player.id);
+    await wagering.settleBet(fields.debitTransactionId);
+    await wagering.resetIfEmpty(nextBalance, `credit:${fields.transactionId}`);
     return response("OK", { balance: nextBalance }, { operator_transaction_id: transactionId });
   });
 }
@@ -293,6 +307,9 @@ async function rollbackRequest(payload, rawBody) {
     }
     fields.userId = player.id;
     const transactionId = await recordTransaction(client, fields, "ROLLBACK", status, nextBalance);
+    const wagering = await wageringTracker(client, player.id);
+    await wagering.cancelBet(fields.debitTransactionId);
+    await wagering.resetIfEmpty(nextBalance, `rollback:${fields.transactionId}`);
     return response("OK", { balance: nextBalance }, { operator_transaction_id: transactionId });
   });
 }

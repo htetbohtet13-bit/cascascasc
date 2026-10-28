@@ -8,6 +8,7 @@
     "dev:api": "node --env-file-if-exists=.env server/index.mjs",
     "start": "node server/index.mjs",
     "build": "vite build",
+    "test:wagering": "node --experimental-test-module-mocks --test tests/wagering.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -16,6 +17,7 @@
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.12",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.2",
