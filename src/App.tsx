@@ -416,7 +416,7 @@ export default function App() {
             {session ? (
               <div className="balance-chip">
                 <div className="balance-value">
-                  <img className="balance-coin" src="/images/balance-coin.svg" alt="" aria-hidden="true" />
+                  <img className="balance-coin" src="/images/balance-coin.png" alt="" aria-hidden="true" />
                   <strong>{balance.toLocaleString("en-US")}</strong>
                   <span>Ks</span>
                 </div>
