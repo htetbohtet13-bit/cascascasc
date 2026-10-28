@@ -158,6 +158,7 @@ export default function App() {
     loadGames()
       .then((items) => {
         if (active) setGames(items.filter((game) =>
+          game.manual_test ||
           (game.pools ?? []).some((pool) => pool.currency === "MMK") ||
           (game.tables ?? []).some((table) => table.currency === "MMK"),
         ));
@@ -602,7 +603,13 @@ export default function App() {
                       <b>{playing ? "ဖွင့်နေသည်…" : "ကစားမည် →"}</b>
                     </button>
                   ))}
-                  {!stakeOptions.length ? <div className="games-empty">ယခုအချိန်တွင် MMK လောင်းကြေးအဆင့် မရှိသေးပါ</div> : null}
+                  {!stakeOptions.length && selectedGame.manual_test ? (
+                    <button type="button" disabled={playing} onClick={() => void onSelectStake(selectedGame, "")}>
+                      <span><strong>စမ်းသပ်လော်ဘီ</strong><small>Provider lobby ကို ဖွင့်ပါ</small></span>
+                      <b>{playing ? "ဖွင့်နေသည်…" : "စမ်းသပ်မည် →"}</b>
+                    </button>
+                  ) : null}
+                  {!stakeOptions.length && !selectedGame.manual_test ? <div className="games-empty">ယခုအချိန်တွင် MMK လောင်းကြေးအဆင့် မရှိသေးပါ</div> : null}
                 </div>
                 {error ? <p className="error game-stake-error">{error}</p> : null}
               </section>

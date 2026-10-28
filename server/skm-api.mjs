@@ -9,6 +9,14 @@ export class SkmApiError extends Error {
   }
 }
 
+export const MANUAL_SAMPLE_GAME = {
+  game_code: "africanbuffaloplus",
+  name: "African Buffalo Plus (Test)",
+  pools: [],
+  tables: [],
+  manual_test: true,
+};
+
 export function skmConfig() {
   const apiBaseUrl = String(process.env.gameapibaseurl ?? "").trim().replace(/\/+$/, "");
   const operatorCode = String(process.env.operatorcode ?? "").trim();
