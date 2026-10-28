@@ -1,5 +1,5 @@
 import { createSkmGameSession } from "./skm-wallet.mjs";
-import { callSkmApi, listProviderGames, MANUAL_SAMPLE_GAME, SkmApiError } from "./skm-api.mjs";
+import { callSkmApi, listProviderGames, SkmApiError } from "./skm-api.mjs";
 
 const DEFAULT_LOBBY_URL = "https://j777ml.com";
 const CURRENCY = "MMK";
@@ -44,13 +44,7 @@ export async function handleGameLogin({ userId, gameCode, tableId, device = "mob
     return { status: 400, body: { error: "Choose a valid stake level" } };
   }
 
-  let games;
-  try {
-    games = await listProviderGames();
-  } catch (error) {
-    if (gameCode !== MANUAL_SAMPLE_GAME.game_code) throw error;
-    games = [MANUAL_SAMPLE_GAME];
-  }
+  const games = await listProviderGames();
   const selectedGame = games.find((game) => game?.game_code === gameCode);
   if (!selectedGame) return { status: 404, body: { error: "This game is not available" } };
 
