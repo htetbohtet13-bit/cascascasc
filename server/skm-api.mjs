@@ -13,26 +13,37 @@ export function skmConfig() {
   const apiBaseUrl = String(process.env.gameapibaseurl ?? "").trim().replace(/\/+$/, "");
   const operatorCode = String(process.env.operatorcode ?? "").trim();
   const secret = String(process.env.gameproviderkey ?? "").trim();
-  const gatewayUrl = String(process.env.GATEWAY_URL ?? "").trim();
-  const gatewaySecret = String(process.env.GATEWAY_SECRET ?? "").trim();
-  if (!apiBaseUrl || !operatorCode || !secret || !gatewayUrl || !gatewaySecret) {
-    throw new SkmApiError("Provider or gateway settings are missing", { status: 503, code: "CONFIG_MISSING" });
+  if (!apiBaseUrl || !operatorCode || !secret) {
+    throw new SkmApiError("Provider API settings are missing", { status: 503, code: "CONFIG_MISSING" });
   }
   let parsed;
-  let parsedGateway;
   try {
     parsed = new URL(apiBaseUrl);
-    parsedGateway = new URL(gatewayUrl);
   } catch {
-    throw new SkmApiError("Provider or gateway URL is invalid", { status: 503, code: "CONFIG_INVALID" });
+    throw new SkmApiError("Provider API base URL is invalid", { status: 503, code: "CONFIG_INVALID" });
   }
   if (parsed.protocol !== "https:") {
     throw new SkmApiError("Provider API base URL must use HTTPS", { status: 503, code: "CONFIG_INVALID" });
   }
+  return { apiBaseUrl, operatorCode, secret };
+}
+
+function gatewayConfig() {
+  const gatewayUrl = String(process.env.GATEWAY_URL ?? "").trim();
+  const gatewaySecret = String(process.env.GATEWAY_SECRET ?? "").trim();
+  if (!gatewayUrl || !gatewaySecret) {
+    throw new SkmApiError("VPS gateway settings are missing", { status: 503, code: "CONFIG_MISSING" });
+  }
+  let parsedGateway;
+  try {
+    parsedGateway = new URL(gatewayUrl);
+  } catch {
+    throw new SkmApiError("Gateway URL is invalid", { status: 503, code: "CONFIG_INVALID" });
+  }
   if (parsedGateway.protocol !== "https:" && parsedGateway.protocol !== "http:") {
     throw new SkmApiError("Gateway URL must use HTTP or HTTPS", { status: 503, code: "CONFIG_INVALID" });
   }
-  return { apiBaseUrl, operatorCode, secret, gatewayUrl, gatewaySecret };
+  return { gatewayUrl, gatewaySecret };
 }
 
 function signature(secret, timestamp, rawBody) {
@@ -78,7 +89,8 @@ export function signedSkmResponse(body) {
 }
 
 export async function callSkmApi(path, { method = "GET", payload } = {}) {
-  const { apiBaseUrl, operatorCode, secret, gatewayUrl, gatewaySecret } = skmConfig();
+  const { apiBaseUrl, operatorCode, secret } = skmConfig();
+  const { gatewayUrl, gatewaySecret } = gatewayConfig();
   const rawBody = method === "GET" ? Buffer.alloc(0) : Buffer.from(JSON.stringify(payload ?? {}), "utf8");
   const timestamp = String(Math.floor(Date.now() / 1000));
   const url = `${apiBaseUrl}/${String(path).replace(/^\/+/, "")}`;
