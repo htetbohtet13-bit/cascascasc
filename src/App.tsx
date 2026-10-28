@@ -597,7 +597,6 @@ export default function App() {
                                 <span className="game-art-placeholder">{game.name}</span>
                               )}
                             </div>
-                            <span className="game-provider-label">{TABLE_GAME_CODES.has(game.game_code) ? "ကတ်ဂိမ်း" : "Slot"}</span>
                             {game.players_online != null ? <span className="game-players"><i />{Number(game.players_online).toLocaleString("en-US")} players</span> : null}
                           </button>
                         );
