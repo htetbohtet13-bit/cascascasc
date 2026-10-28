@@ -3798,8 +3798,22 @@
 
 /* Game catalog sizing, card effects, and category chips from the game-list guide. */
 .chips { gap: 8px; padding: 14px 16px 0; }
-.chip { padding: 8px 14px; border: 1px solid transparent; border-radius: 999px; background: #1c2030; color: rgba(255, 255, 255, 0.55); font-size: 12px; }
-.chip.active { border-color: rgba(121, 175, 255, 0.55); background: rgba(45, 126, 255, 0.22); color: #b7d4ff; }
+.chip {
+  padding: 8px 14px;
+  border: 1px solid var(--ui-line);
+  border-radius: 999px;
+  background: var(--ui-surface-soft);
+  color: var(--ui-ink);
+  font-size: 12px;
+  font-weight: 700;
+  transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.chip.active {
+  border-color: #d99b20;
+  background: var(--ui-gold-gradient);
+  color: var(--ui-gold-ink);
+  box-shadow: 0 3px 8px rgba(176, 117, 10, 0.18);
+}
 .games-section { margin-top: 16px; padding: 0 16px 8px; }
 .games-title { margin: 0 0 14px; font-size: 15px; font-weight: 700; }
 .games-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
