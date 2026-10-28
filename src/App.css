@@ -314,7 +314,7 @@
   pointer-events: none;
   background-image: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.14) 50%, transparent 70%);
   background-size: 300% 100%;
-  animation: shimmerMove 3.5s linear infinite;
+  animation: shimmerMove 7s linear infinite;
 }
 
 .games-empty {
@@ -3858,7 +3858,7 @@
 }
 .game-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .game-art::before { content: ""; position: absolute; z-index: 1; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 20%, rgba(255, 255, 255, .22), transparent 55%); }
-.game-art::after { content: ""; position: absolute; z-index: 2; inset: 0; display: block; pointer-events: none; background-image: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, .16) 50%, transparent 70%); background-size: 300% 100%; animation: shimmerMove 3.5s linear infinite; }
+.game-art::after { content: ""; position: absolute; z-index: 2; inset: 0; display: block; pointer-events: none; background-image: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, .16) 50%, transparent 70%); background-size: 300% 100%; animation: shimmerMove 7s linear infinite; }
 .game-tile:hover .game-art, .game-tile:focus-visible .game-art { outline: 1.5px solid var(--game-glow-hover, rgba(213, 150, 18, .4)); outline-offset: 1px; box-shadow: 0 16px 40px var(--game-glow-hover, rgba(75, 51, 13, .4)); }
 .game-art-placeholder { position: absolute; inset: 0; display: grid; place-items: center; padding: 12px; color: #fff8e9; font-size: 14px; font-weight: 900; text-align: center; text-shadow: 0 2px 8px rgba(0, 0, 0, .45); }
 .game-players { display: flex; min-height: 13px; align-items: center; gap: 5px; color: var(--ui-muted); font-size: 10px; font-weight: 700; line-height: 1; }
