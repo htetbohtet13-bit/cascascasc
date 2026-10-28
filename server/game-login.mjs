@@ -1,12 +1,7 @@
 import { createSkmGameSession } from "./skm-wallet.mjs";
 import { callSkmApi, listProviderGames, SkmApiError } from "./skm-api.mjs";
 
-const LOBBY_URL = "https://www.j777ml.com/";
 const CURRENCY = "MMK";
-
-function configuredLobbyUrl() {
-  return LOBBY_URL;
-}
 
 export function gameLoginFailure(error) {
   if (error instanceof SkmApiError) {
@@ -50,7 +45,6 @@ export async function handleGameLogin({ userId, gameCode, tableId, device = "mob
   if (selectedTableId && !validStake) {
     return { status: 404, body: { error: "This stake level is not available" } };
   }
-  const lobbyUrl = configuredLobbyUrl();
   const session = await createSkmGameSession(userId);
   const payload = {
     player_id: session.player_id,
@@ -60,7 +54,6 @@ export async function handleGameLogin({ userId, gameCode, tableId, device = "mob
     game_code: gameCode,
     ...(selectedTableId ? { table_id: selectedTableId } : {}),
     language: "my",
-    lobby_url: lobbyUrl,
     device: device === "desktop" ? "desktop" : "mobile",
   };
   const providerResult = await callSkmApi("game/launch", { method: "POST", payload });
