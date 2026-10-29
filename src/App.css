@@ -3762,7 +3762,6 @@
 .admin-login-form input:focus { border-color: #222; outline: 2px solid #222; outline-offset: 2px; }
 .admin-login-form input:disabled { opacity: .65; }
 .admin-login-form #admin-otp { font-size: 16px !important; font-variant-numeric: tabular-nums; letter-spacing: .12em; }
-.admin-login-form small { color: #555; font-size: 12px; line-height: 1.8; }
 .admin-login-form > span { color: #a00000; font-size: 13px; line-height: 1.8; }
 .admin-login-form .admin-gate-button { width: auto; justify-self: start; cursor: pointer; }
 .admin-login-form .admin-gate-button:disabled { opacity: 0.6; cursor: wait; }

@@ -186,18 +186,16 @@ export default function AdminDashboard() {
     return (
       <main className="admin-gate" aria-labelledby="admin-login-title">
         <div className="admin-gate-card">
-          <h1 id="admin-login-title">{authCode === 401 ? "စီမံခန့်ခွဲသူ ဝင်ရန်" : "ဝင်ရောက်ရန် ပြင်ဆင်မှု လိုအပ်နေပါသည်"}</h1>
+          <h1 id="admin-login-title">{authCode === 401 ? "စီမံခန့်ခွဲသူ ဝင်ရန်" : "ယာယီ အသုံးမပြုနိုင်ပါ"}</h1>
           {authCode === 401 ? (
             <>
-              <p>{mfaRequired ? "စကားဝှက်နှင့် ဖုန်းရှိ Authenticator အက်ပ်မှ ကုဒ်ကို ထည့်ပါ။" : "ဆက်လက်ဝင်ရောက်ရန် စီမံခန့်ခွဲသူ စကားဝှက်ကို ထည့်ပါ။"}</p>
               <form className="admin-login-form" onSubmit={(event) => void login(event)}>
                 <label htmlFor="admin-secret">စီမံခန့်ခွဲသူ စကားဝှက်</label>
                 <input id="admin-secret" type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" autoFocus disabled={loginBusy} required />
                 {mfaRequired ? (
                   <>
                     <label htmlFor="admin-otp">Authenticator ကုဒ် (၆ လုံး)</label>
-                    <input id="admin-otp" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} placeholder="000000" value={loginCode} onChange={(event) => setLoginCode(event.target.value.replace(/[^0-9]/g, "").slice(0, 6))} disabled={loginBusy} required aria-describedby="admin-otp-help" />
-                    <small id="admin-otp-help">ဖုန်းအက်ပ်ထဲရှိ လက်ရှိကုဒ်ကို ထည့်ပါ။ ကုဒ်အသစ်သည် စက္ကန့် ၃၀ တိုင်း ပြောင်းပါသည်။</small>
+                    <input id="admin-otp" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} placeholder="000000" value={loginCode} onChange={(event) => setLoginCode(event.target.value.replace(/[^0-9]/g, "").slice(0, 6))} disabled={loginBusy} required />
                   </>
                 ) : null}
                 {loginError ? <span role="alert">{loginError}</span> : null}
