@@ -184,10 +184,9 @@ export default function AdminDashboard() {
 
   if (authCode === 401 || authCode === 503) {
     return (
-      <main className="admin-gate">
+      <main className="admin-gate" aria-labelledby="admin-login-title">
         <div className="admin-gate-card">
-          <div className="admin-brand-mark">777</div>
-          <h1>{authCode === 401 ? "စီမံခန့်ခွဲသူ ဝင်ရန်" : "ဝင်ရောက်ရန် ပြင်ဆင်မှု လိုအပ်နေပါသည်"}</h1>
+          <h1 id="admin-login-title">{authCode === 401 ? "စီမံခန့်ခွဲသူ ဝင်ရန်" : "ဝင်ရောက်ရန် ပြင်ဆင်မှု လိုအပ်နေပါသည်"}</h1>
           {authCode === 401 ? (
             <>
               <p>{mfaRequired ? "စကားဝှက်နှင့် ဖုန်းရှိ Authenticator အက်ပ်မှ ကုဒ်ကို ထည့်ပါ။" : "ဆက်လက်ဝင်ရောက်ရန် စီမံခန့်ခွဲသူ စကားဝှက်ကို ထည့်ပါ။"}</p>
@@ -208,7 +207,6 @@ export default function AdminDashboard() {
           ) : (
             <>
               <p>{error}</p>
-              <p className="admin-setup-note">Vercel ရှိ server လုံခြုံရေးဆိုင်ရာ သတ်မှတ်ချက်များကို စစ်ဆေးပြီး ပြန်လည်ဖြန့်ချိပါ။</p>
             </>
           )}
         </div>

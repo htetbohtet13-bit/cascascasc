@@ -3751,24 +3751,24 @@
 .admin-detail-records .admin-status { width: fit-content; }
 .admin-back-link { margin: 0 0 12px; padding: 0; border: 0; background: transparent; color: #8c6413; font-size: 11px; font-weight: 750; cursor: pointer; }
 
-.admin-gate { display: grid; width: 100%; min-height: 100dvh; place-items: center; padding: 20px; background: linear-gradient(145deg, #fff8e9, #f1e4cb); color: #342719; }
-.admin-gate-card { width: min(100%, 390px); padding: 28px; border: 1px solid #e6d4ac; border-radius: 20px; background: #fffdf8; text-align: center; box-shadow: 0 16px 45px rgba(73, 54, 35, 0.12); }
-.admin-gate-card .admin-brand-mark { margin: 0 auto 16px; }
-.admin-gate-card h1 { margin: 0; font-size: 20px; }
-.admin-gate-card p { color: #766957; font-size: 12px; line-height: 1.65; }
-.admin-login-form { display: grid; gap: 9px; margin-top: 17px; text-align: left; }
-.admin-login-form label { color: #5b482f; font-size: 10px; font-weight: 800; }
+.admin-gate { display: block; width: 100%; height: 100dvh; overflow-y: auto; padding: 56px 20px 32px; background: #fff; color: #111; font-family: Arial, "Myanmar Text", sans-serif; }
+.admin-gate-card { width: min(100%, 360px); margin: 0 auto; padding: 0; border: 0; border-radius: 0; background: transparent; text-align: left; box-shadow: none; }
+.admin-gate-card h1 { margin: 0 0 16px; padding-bottom: 12px; border-bottom: 1px solid #aaa; font-size: 18px; font-weight: 700; line-height: 1.7; }
+.admin-gate-card p { margin: 0 0 18px; color: #444; font-size: 13px; line-height: 1.8; }
+.admin-login-form { display: grid; gap: 8px; margin-top: 18px; text-align: left; }
+.admin-login-form label { color: #111; font-size: 13px; font-weight: 400; line-height: 1.8; }
 .admin-login-form label:has(+ #admin-otp) { margin-top: 4px; }
-.admin-login-form input { width: 100%; height: 43px; padding: 0 12px; border: 1px solid #e1d2b4; border-radius: 10px; outline: none; background: #fffdf8; color: #342719; font-size: 14px !important; }
-.admin-login-form input:focus { border-color: #d59612; box-shadow: 0 0 0 3px rgba(213, 150, 18, 0.12); }
+.admin-login-form input { width: 100%; height: 38px; padding: 4px 8px; border: 1px solid #888; border-radius: 0; background: #fff; color: #111; font-size: 16px !important; box-shadow: inset 1px 1px 2px #ddd; }
+.admin-login-form input:focus { border-color: #222; outline: 2px solid #222; outline-offset: 2px; }
 .admin-login-form input:disabled { opacity: .65; }
-.admin-login-form #admin-otp { font-size: 20px !important; font-variant-numeric: tabular-nums; letter-spacing: .22em; }
-.admin-login-form small { color: #766957; font-size: 11px; line-height: 1.7; }
-.admin-login-form > span { color: #a24e3b; font-size: 10px; }
-.admin-login-form .admin-gate-button { width: 100%; border: 0; cursor: pointer; }
+.admin-login-form #admin-otp { font-size: 16px !important; font-variant-numeric: tabular-nums; letter-spacing: .12em; }
+.admin-login-form small { color: #555; font-size: 12px; line-height: 1.8; }
+.admin-login-form > span { color: #a00000; font-size: 13px; line-height: 1.8; }
+.admin-login-form .admin-gate-button { width: auto; justify-self: start; cursor: pointer; }
 .admin-login-form .admin-gate-button:disabled { opacity: 0.6; cursor: wait; }
-.admin-gate-button { display: inline-flex; justify-content: center; margin-top: 8px; padding: 11px 16px; border-radius: 10px; background: var(--ui-gold-gradient); color: var(--ui-gold-ink); font-size: 11px; font-weight: 800; text-decoration: none; }
-.admin-setup-note code { padding: 2px 5px; border-radius: 4px; background: #f3eadb; color: #5e410b; }
+.admin-gate-button { display: inline-flex; justify-content: center; margin-top: 10px; min-height: 36px; padding: 5px 22px; border: 2px outset #d0d0d0; border-radius: 0; background: #eee; color: #111; font-size: 14px; font-weight: 400; text-decoration: none; }
+.admin-gate-button:active:not(:disabled) { border-style: inset; }
+.admin-gate-button:focus-visible { outline: 2px solid #222; outline-offset: 2px; }
 
 .admin-game-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px; }
 .admin-game-heading > div > span { color: #9b7f56; font-size: 9px; font-weight: 850; letter-spacing: 1.3px; }
