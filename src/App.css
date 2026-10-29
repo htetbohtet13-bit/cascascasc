@@ -3758,8 +3758,12 @@
 .admin-gate-card p { color: #766957; font-size: 12px; line-height: 1.65; }
 .admin-login-form { display: grid; gap: 9px; margin-top: 17px; text-align: left; }
 .admin-login-form label { color: #5b482f; font-size: 10px; font-weight: 800; }
+.admin-login-form label:has(+ #admin-otp) { margin-top: 4px; }
 .admin-login-form input { width: 100%; height: 43px; padding: 0 12px; border: 1px solid #e1d2b4; border-radius: 10px; outline: none; background: #fffdf8; color: #342719; font-size: 14px !important; }
 .admin-login-form input:focus { border-color: #d59612; box-shadow: 0 0 0 3px rgba(213, 150, 18, 0.12); }
+.admin-login-form input:disabled { opacity: .65; }
+.admin-login-form #admin-otp { font-size: 20px !important; font-variant-numeric: tabular-nums; letter-spacing: .22em; }
+.admin-login-form small { color: #766957; font-size: 11px; line-height: 1.7; }
 .admin-login-form > span { color: #a24e3b; font-size: 10px; }
 .admin-login-form .admin-gate-button { width: 100%; border: 0; cursor: pointer; }
 .admin-login-form .admin-gate-button:disabled { opacity: 0.6; cursor: wait; }

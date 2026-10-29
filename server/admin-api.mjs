@@ -1,9 +1,10 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { getPool } from "./neon.mjs";
+import { getPool, withTransaction } from "./neon.mjs";
 import { listProviderGames } from "./skm-api.mjs";
 import { applyGameDisplaySettings } from "./game-display.mjs";
 import { unsafeRequestError } from "./request-security.mjs";
 import { consumeRateLimit } from "./rate-limit.mjs";
+import { adminMfaConfig, adminSessionKey, claimAdminTotp, matchingAdminTotpStep } from "./admin-mfa.mjs";
 
 const PAGE_SIZE = 50;
 const MAX_PAGE = 1_000_000;
@@ -33,10 +34,10 @@ function sessionHash(token) {
   return createHash("sha256").update(token).digest("hex");
 }
 
-async function createAdminSession(secret) {
+async function createAdminSession(secret, client = getPool()) {
   const payload = `${Math.floor(Date.now() / 1000)}.${randomBytes(18).toString("hex")}`;
   const token = `${payload}.${tokenSignature(payload, secret)}`;
-  await getPool().query(
+  await client.query(
     `insert into public.auth_admin_sessions (token_hash, expires_at)
      values ($1, now() + ($2 * interval '1 second'))`,
     [sessionHash(token), ADMIN_SESSION_SECONDS],
@@ -328,6 +329,12 @@ async function adminRequest(req) {
   if (Buffer.byteLength(secret, "utf8") < 16) {
     return { status: 503, body: { error: secret ? "Admin password must be at least 16 characters" : "Admin password is not configured" } };
   }
+  const mfa = adminMfaConfig();
+  const sessionKey = adminSessionKey(secret, mfa);
+  const unauthorized = () => ({ status: 401, body: {
+    error: mfa ? "စကားဝှက်နှင့် Authenticator ကုဒ်ကို စစ်ဆေးပြီး ထပ်မံကြိုးစားပါ။" : "Enter the admin password to continue",
+    mfaRequired: Boolean(mfa),
+  } });
 
   if (req.method === "POST") {
     const action = req.body?.action;
@@ -335,8 +342,23 @@ async function adminRequest(req) {
       const limited = await consumeRateLimit(req, "admin-login");
       if (limited) return limited;
       const attempt = typeof req.body?.password === "string" && req.body.password.length <= 4096 ? req.body.password : "";
-      if (!passwordsMatch(attempt, secret)) return { status: 401, body: { error: "Password is incorrect" } };
-      return { status: 200, headers: { "Set-Cookie": await createAdminSession(secret) }, body: { ok: true } };
+      if (!passwordsMatch(attempt, secret)) return unauthorized();
+      if (mfa) {
+        // A shared ceiling stops code guessing with a stolen password even if
+        // requests rotate their source IP. Invalid passwords cannot exhaust it.
+        const mfaLimited = await consumeRateLimit(req, "admin-mfa", "shared-admin");
+        if (mfaLimited) return mfaLimited;
+        const step = matchingAdminTotpStep(mfa, req.body?.code);
+        if (step === null) return unauthorized();
+        return await withTransaction(async (client) => {
+          if (!await claimAdminTotp(client, mfa, step)) return unauthorized();
+          // Code consumption and session registration commit together. A
+          // storage failure cannot leave a reusable code and an active cookie.
+          const cookie = await createAdminSession(sessionKey, client);
+          return { status: 200, headers: { "Set-Cookie": cookie }, body: { ok: true } };
+        });
+      }
+      return { status: 200, headers: { "Set-Cookie": await createAdminSession(sessionKey) }, body: { ok: true } };
     }
     if (action === "logout") {
       const token = cookieValue(req, ADMIN_SESSION_COOKIE);
@@ -348,14 +370,14 @@ async function adminRequest(req) {
         body: { ok: true },
       };
     }
-    if (!await validAdminSession(req, secret)) return { status: 401, body: { error: "Enter the admin password to continue" } };
+    if (!await validAdminSession(req, sessionKey)) return unauthorized();
     if (action === "save_game_settings") return await saveGameSettings(req.body);
     if (action === "set_game_visibility") return await setGameVisibility(req.body);
     if (action === "set_game_hot") return await setGameHot(req.body);
     return { status: 400, body: { error: "Unknown admin action" } };
   }
   if (req.method !== "GET") return { status: 405, body: { error: "Method not allowed" } };
-  if (!await validAdminSession(req, secret)) return { status: 401, body: { error: "Enter the admin password to continue" } };
+  if (!await validAdminSession(req, sessionKey)) return unauthorized();
 
   const view = url.searchParams.get("view") || "overview";
   const pool = getPool();

@@ -9,6 +9,7 @@ const POLICIES = {
   "sign-in": [{ kind: "ip", limit: 120, seconds: 900 }, { kind: "identity", limit: 10, seconds: 900 }],
   "sign-up": [{ kind: "ip", limit: 30, seconds: 3600 }, { kind: "identity", limit: 3, seconds: 3600 }],
   "admin-login": [{ kind: "ip", limit: 10, seconds: 900 }],
+  "admin-mfa": [{ kind: "identity", limit: 10, seconds: 300 }],
   "deposit-verify": [
     { kind: "ip", limit: 120, seconds: 300 },
     { kind: "identity", limit: 6, seconds: 300 },

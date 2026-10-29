@@ -11,6 +11,7 @@ const queries = [];
 let passwordHashes = 0;
 let cleanupNow = false;
 let databaseFailure;
+let failAdminSessionInsert = false;
 mock.module("node:crypto", {
   namedExports: {
     ...crypto,
@@ -22,6 +23,7 @@ function clientFor(connection) {
   return { async query(sql, params) {
     queries.push(sql);
     if (databaseFailure) throw databaseFailure;
+    if (failAdminSessionInsert && /insert into public.auth_admin_sessions/i.test(sql)) throw new Error("Simulated admin session write failure");
     const result = await connection.query(sql, params);
     return { rows: result.rows, rowCount: /^\s*select/i.test(sql) ? result.rows.length : result.affectedRows };
   } };
@@ -39,8 +41,10 @@ const { handleAdminApi } = await import("../server/admin-api.mjs");
 const { consumeRateLimit } = await import("../server/rate-limit.mjs");
 const secondLimiter = await import("../server/rate-limit.mjs?separate-serverless-instance");
 const { unsafeRequestError, trustedClientIp } = await import("../server/request-security.mjs");
+const { adminTotpCode } = await import("../server/admin-mfa.mjs");
+const secondAdmin = await import("../server/admin-api.mjs?separate-mfa-instance");
 
-const ENV_KEYS = ["NODE_ENV", "VERCEL", "VERCEL_ENV", "VERCEL_URL", "APP_ORIGINS", "DATABASE_URL", "admin_secret", "ADMIN_SECRET", "RATE_LIMIT_SECRET", "SLOT_API_PORT"];
+const ENV_KEYS = ["NODE_ENV", "VERCEL", "VERCEL_ENV", "VERCEL_URL", "APP_ORIGINS", "DATABASE_URL", "admin_secret", "ADMIN_SECRET", "ADMIN_TOTP_SECRET", "ADMIN_MFA_REQUIRED", "RATE_LIMIT_SECRET", "SLOT_API_PORT"];
 const savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 async function migration(name) {
   const sql = await readFile(new URL(`../neon/${name}`, import.meta.url), "utf8");
@@ -60,6 +64,7 @@ beforeEach(async () => {
   process.env.admin_secret = "local-administrator-test-password";
   process.env.RATE_LIMIT_SECRET = "local-rate-limit-test-secret";
   databaseFailure = undefined;
+  failAdminSessionInsert = false;
   cleanupNow = false;
   passwordHashes = 0;
   queries.length = 0;
@@ -288,6 +293,134 @@ test("admin brute-force protection persists and missing trusted origin cannot mu
   const unauthorized = await admin({ action: "set_game_visibility", game_code: "shankoemee", is_active: false }, { cookie: adminCookie, origin: undefined });
   assert.equal(unauthorized.status, 403);
   assert.equal((await db.query("select count(*)::integer as count from public.game_display_settings")).rows[0].count, 0);
+});
+
+const MFA_SEED = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"; // RFC 6238 public test key.
+function enableMfa(t) {
+  process.env.ADMIN_TOTP_SECRET = MFA_SEED;
+  process.env.ADMIN_MFA_REQUIRED = "true";
+  const timestamp = Math.floor(Date.now() / 30_000) * 30_000 + 15_000;
+  t.mock.method(Date, "now", () => timestamp);
+  const key = Buffer.from("12345678901234567890");
+  return { timestamp, key, step: Math.floor(timestamp / 30_000), code: adminTotpCode(key, Math.floor(timestamp / 30_000)) };
+}
+async function mfaLogin(code, ip = "203.0.113.7", handler = handleAdminApi, password = process.env.admin_secret) {
+  return handler(request({ action: "login", password, code }, { url: "/api/admin", ip }));
+}
+
+test("configured MFA rejects missing, malformed, stale codes and wrong passwords with one generic failure", async (t) => {
+  const { code, key, step } = enableMfa(t);
+  const invalid = [undefined, Number(code), [code], { code }, ` ${code}`, code + "0", adminTotpCode(key, step - 2), adminTotpCode(key, step + 2)];
+  for (const [index, value] of invalid.entries()) {
+    const rejected = await mfaLogin(value, `198.51.100.${index + 1}`);
+    assert.equal(rejected.status, 401);
+    assert.equal(rejected.body.mfaRequired, true);
+    assert.equal(rejected.headers?.["Set-Cookie"], undefined);
+  }
+  const wrongPassword = await mfaLogin(code, "198.51.100.50", handleAdminApi, "incorrect-password");
+  assert.equal(wrongPassword.status, 401);
+  assert.deepEqual(wrongPassword.body, (await mfaLogin(undefined, "198.51.100.51")).body);
+  assert.equal((await db.query("select count(*)::int as count from public.auth_admin_sessions")).rows[0].count, 0);
+  assert.equal((await db.query("select count(*)::int as count from public.auth_rate_limits where scope='admin-totp-used:v1'")).rows[0].count, 0);
+});
+
+test("password plus a valid code registers a Secure HttpOnly session, and a used code never creates another session", async (t) => {
+  const { code } = enableMfa(t);
+  process.env.NODE_ENV = "production";
+  const signedIn = await mfaLogin(code);
+  assert.equal(signedIn.status, 200);
+  assert.match(signedIn.headers["Set-Cookie"], /HttpOnly; SameSite=Strict; Max-Age=43200; Secure$/);
+  const sessionCookie = signedIn.headers["Set-Cookie"].split(";", 1)[0];
+  assert.equal((await admin({ action: "unknown" }, { cookie: sessionCookie })).status, 400);
+  assert.equal((await mfaLogin(code, "198.51.100.1")).status, 401);
+  const used = await db.query("select * from public.auth_rate_limits where scope='admin-totp-used:v1'");
+  assert.equal(used.rows.length, 1);
+  assert.match(used.rows[0].key_hash, /^[0-9a-f]{64}$/);
+  assert.ok(!JSON.stringify(used.rows).includes(MFA_SEED));
+  assert.equal((await db.query("select count(*)::int as count from public.auth_admin_sessions")).rows[0].count, 1);
+  assert.equal((await admin({ action: "logout" }, { cookie: sessionCookie })).status, 200);
+  assert.equal((await admin({ action: "unknown" }, { cookie: sessionCookie })).status, 401);
+});
+
+test("the same accepted time step remains consumed when a neighbouring clock window is used", async (t) => {
+  const { timestamp, code } = enableMfa(t);
+  assert.equal((await mfaLogin(code)).status, 200);
+  t.mock.method(Date, "now", () => timestamp + 30_000);
+  assert.equal((await mfaLogin(code, "198.51.100.1")).status, 401);
+});
+
+test("concurrent code replays across independent admin instances issue at most one session", async (t) => {
+  const { code } = enableMfa(t);
+  const results = await Promise.all(Array.from({ length: 5 }, (_, index) => mfaLogin(
+    code, `198.51.100.${index + 1}`, index % 2 ? secondAdmin.handleAdminApi : handleAdminApi,
+  )));
+  assert.equal(results.filter((result) => result.status === 200).length, 1);
+  assert.equal(results.filter((result) => result.status === 401).length, 4);
+  assert.equal((await db.query("select count(*)::int as count from public.auth_admin_sessions")).rows[0].count, 1);
+});
+
+test("shared MFA attempt ceiling blocks distributed guesses even when each IP is fresh", async (t) => {
+  const { code } = enableMfa(t);
+  for (let index = 0; index < 10; index++) assert.equal((await mfaLogin("invalid", `198.51.100.${index + 1}`)).status, 401);
+  const result = await mfaLogin(code, "203.0.113.99", secondAdmin.handleAdminApi);
+  assert.equal(result.status, 429);
+  assert.ok(Number(result.headers["Retry-After"]) > 0);
+  assert.equal((await db.query("select count(*)::int as count from public.auth_admin_sessions")).rows[0].count, 0);
+});
+
+test("enabling and rotating MFA invalidates old sessions on reads and mutations", async (t) => {
+  const passwordOnlyCookie = await adminLogin();
+  const { code } = enableMfa(t);
+  for (const cookie of [passwordOnlyCookie]) {
+    assert.equal((await admin({ action: "set_game_visibility", game_code: "shankoemee", is_active: false }, { cookie })).status, 401);
+    assert.equal((await handleAdminApi(request({}, { method: "GET", url: "/api/admin?view=unknown", headers: { cookie } }))).status, 401);
+  }
+  const signedIn = await mfaLogin(code, "198.51.100.20");
+  assert.equal(signedIn.status, 200);
+  const mfaCookie = signedIn.headers["Set-Cookie"].split(";", 1)[0];
+  process.env.ADMIN_TOTP_SECRET = "A".repeat(32);
+  assert.equal((await admin({ action: "unknown" }, { cookie: mfaCookie })).status, 401);
+  assert.equal((await handleAdminApi(request({}, { method: "GET", url: "/api/admin?view=unknown", headers: { cookie: mfaCookie } }))).status, 401);
+});
+
+test("required MFA missing or invalid configuration fails closed without returning configuration values", async (t) => {
+  const cookie = await adminLogin();
+  t.mock.method(console, "error", () => {});
+  process.env.ADMIN_MFA_REQUIRED = "true";
+  for (const value of ["", "invalid-secret-must-not-be-returned", "A".repeat(31), "0".repeat(32)]) {
+    process.env.ADMIN_TOTP_SECRET = value;
+    for (const req of [request({ action: "login", password: process.env.admin_secret }), request({}, { method: "GET", headers: { cookie } })]) {
+      const result = await handleAdminApi(req);
+      assert.equal(result.status, 503);
+      if (value) assert.ok(!JSON.stringify(result).includes(value));
+      assert.equal(result.headers?.["Set-Cookie"], undefined);
+    }
+  }
+  process.env.ADMIN_TOTP_SECRET = MFA_SEED;
+  process.env.ADMIN_MFA_REQUIRED = "misspelled";
+  assert.equal((await mfaLogin("123456")).status, 503);
+  assert.equal((await db.query("select count(*)::int as count from public.auth_admin_sessions")).rows[0].count, 1);
+});
+
+test("a configured secret enables MFA even before the required flag is set", async (t) => {
+  enableMfa(t);
+  delete process.env.ADMIN_MFA_REQUIRED;
+  assert.equal((await mfaLogin(undefined)).status, 401);
+  process.env.ADMIN_MFA_REQUIRED = "false";
+  assert.equal((await mfaLogin(undefined)).status, 401);
+});
+
+test("code consumption rolls back when session registration fails; no cookie is issued and the code can be retried", async (t) => {
+  const { code } = enableMfa(t);
+  t.mock.method(console, "error", () => {});
+  failAdminSessionInsert = true;
+  const failed = await mfaLogin(code);
+  assert.equal(failed.status, 503);
+  assert.equal(failed.headers?.["Set-Cookie"], undefined);
+  assert.equal((await db.query("select count(*)::int as count from public.auth_rate_limits where scope='admin-totp-used:v1'")).rows[0].count, 0);
+  assert.equal((await db.query("select count(*)::int as count from public.auth_admin_sessions")).rows[0].count, 0);
+  failAdminSessionInsert = false;
+  assert.equal((await mfaLogin(code, "198.51.100.2")).status, 200);
 });
 
 test("missing security migration fails closed before signup, signin or admin sessions, while existing user session reads/logout work", async (t) => {

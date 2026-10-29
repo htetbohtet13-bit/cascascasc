@@ -68,6 +68,8 @@ export default function AdminDashboard() {
   const [error, setError] = useState("");
   const [authCode, setAuthCode] = useState(0);
   const [loginPassword, setLoginPassword] = useState("");
+  const [loginCode, setLoginCode] = useState("");
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
 
@@ -89,8 +91,9 @@ export default function AdminDashboard() {
         .then(async (response) => {
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) {
-            const failure = new Error(payload.error || "Could not load dashboard data") as Error & { status?: number };
+            const failure = new Error(payload.error || "Could not load dashboard data") as Error & { status?: number; mfaRequired?: boolean };
             failure.status = response.status;
+            failure.mfaRequired = payload.mfaRequired === true;
             throw failure;
           }
           return payload;
@@ -98,10 +101,14 @@ export default function AdminDashboard() {
         .then((payload) => {
           if (active) setData(payload);
         })
-        .catch((reason: Error & { status?: number }) => {
+        .catch((reason: Error & { status?: number; mfaRequired?: boolean }) => {
           if (!active) return;
           setError(reason.message || "Could not load dashboard data");
           setAuthCode(reason.status || 0);
+          if (reason.status === 401) {
+            setMfaRequired(reason.mfaRequired === true);
+            setData({});
+          }
         })
         .finally(() => {
           if (active) setLoading(false);
@@ -130,16 +137,21 @@ export default function AdminDashboard() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "login", password: loginPassword }),
+        body: JSON.stringify({ action: "login", password: loginPassword, code: loginCode }),
       });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Could not sign in");
+      if (!response.ok) {
+        if (response.status === 401) setMfaRequired(result.mfaRequired === true);
+        throw new Error(result.error || "ဝင်ရောက်၍ မရပါ။ ထပ်မံကြိုးစားပါ။");
+      }
       setLoginPassword("");
+      setLoginCode("");
       setAuthCode(0);
       setError("");
       setRefreshKey((value) => value + 1);
     } catch (reason) {
       setLoginError(reason instanceof Error ? reason.message : "Could not sign in");
+      setLoginCode("");
     } finally {
       setLoginBusy(false);
     }
@@ -157,6 +169,7 @@ export default function AdminDashboard() {
       if (!response.ok) throw new Error("Could not sign out");
       setData({});
       setLoginPassword("");
+      setLoginCode("");
       setAuthCode(401);
     } catch {
       setError("Could not confirm sign-out. Please try again.");
@@ -174,21 +187,28 @@ export default function AdminDashboard() {
       <main className="admin-gate">
         <div className="admin-gate-card">
           <div className="admin-brand-mark">777</div>
-          <h1>{authCode === 401 ? "Admin sign-in" : "Admin password is not set"}</h1>
+          <h1>{authCode === 401 ? "စီမံခန့်ခွဲသူ ဝင်ရန်" : "ဝင်ရောက်ရန် ပြင်ဆင်မှု လိုအပ်နေပါသည်"}</h1>
           {authCode === 401 ? (
             <>
-              <p>Enter the admin password to continue.</p>
+              <p>{mfaRequired ? "စကားဝှက်နှင့် ဖုန်းရှိ Authenticator အက်ပ်မှ ကုဒ်ကို ထည့်ပါ။" : "ဆက်လက်ဝင်ရောက်ရန် စီမံခန့်ခွဲသူ စကားဝှက်ကို ထည့်ပါ။"}</p>
               <form className="admin-login-form" onSubmit={(event) => void login(event)}>
-                <label htmlFor="admin-secret">Admin password</label>
-                <input id="admin-secret" type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" autoFocus required />
+                <label htmlFor="admin-secret">စီမံခန့်ခွဲသူ စကားဝှက်</label>
+                <input id="admin-secret" type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" autoFocus disabled={loginBusy} required />
+                {mfaRequired ? (
+                  <>
+                    <label htmlFor="admin-otp">Authenticator ကုဒ် (၆ လုံး)</label>
+                    <input id="admin-otp" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} placeholder="000000" value={loginCode} onChange={(event) => setLoginCode(event.target.value.replace(/[^0-9]/g, "").slice(0, 6))} disabled={loginBusy} required aria-describedby="admin-otp-help" />
+                    <small id="admin-otp-help">ဖုန်းအက်ပ်ထဲရှိ လက်ရှိကုဒ်ကို ထည့်ပါ။ ကုဒ်အသစ်သည် စက္ကန့် ၃၀ တိုင်း ပြောင်းပါသည်။</small>
+                  </>
+                ) : null}
                 {loginError ? <span role="alert">{loginError}</span> : null}
-                <button className="admin-gate-button" type="submit" disabled={loginBusy}>{loginBusy ? "Checking…" : "Log in"}</button>
+                <button className="admin-gate-button" type="submit" disabled={loginBusy}>{loginBusy ? "စစ်ဆေးနေပါသည်…" : "ဝင်မည်"}</button>
               </form>
             </>
           ) : (
             <>
               <p>{error}</p>
-              <p className="admin-setup-note">Set a long password in the server-only <code>admin_secret</code> environment variable in Vercel, then redeploy.</p>
+              <p className="admin-setup-note">Vercel ရှိ server လုံခြုံရေးဆိုင်ရာ သတ်မှတ်ချက်များကို စစ်ဆေးပြီး ပြန်လည်ဖြန့်ချိပါ။</p>
             </>
           )}
         </div>
