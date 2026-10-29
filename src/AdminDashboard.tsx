@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 
 type Section = "overview" | "users" | "games" | "bets" | "deposits" | "withdrawals";
 type UserRow = { id: string; phone: string; balance: number | string; created_at: string };
@@ -67,14 +67,18 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [authCode, setAuthCode] = useState(0);
+  const [sessionVerified, setSessionVerified] = useState(false);
   const [loginPassword, setLoginPassword] = useState("");
   const [loginCode, setLoginCode] = useState("");
   const [mfaRequired, setMfaRequired] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
+  const requestVersion = useRef(0);
 
   useEffect(() => {
     let active = true;
+    const version = ++requestVersion.current;
+    const isCurrent = () => active && version === requestVersion.current;
     const timer = window.setTimeout(() => {
       const view = selectedUserId ? "user" : section;
       const params = new URLSearchParams({ view });
@@ -86,32 +90,36 @@ export default function AdminDashboard() {
       }
       setLoading(true);
       setError("");
-      setAuthCode(0);
       fetch(`/api/admin?${params.toString()}`, { credentials: "include" })
         .then(async (response) => {
-          const payload = await response.json().catch(() => ({}));
+          const payload = await response.json();
           if (!response.ok) {
             const failure = new Error(payload.error || "Could not load dashboard data") as Error & { status?: number; mfaRequired?: boolean };
             failure.status = response.status;
             failure.mfaRequired = payload.mfaRequired === true;
             throw failure;
           }
+          if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Could not verify admin access");
           return payload;
         })
         .then((payload) => {
-          if (active) setData(payload);
+          if (!isCurrent()) return;
+          setData(payload);
+          setSessionVerified(true);
+          setAuthCode(0);
         })
         .catch((reason: Error & { status?: number; mfaRequired?: boolean }) => {
-          if (!active) return;
+          if (!isCurrent()) return;
+          setSessionVerified(false);
+          setData({});
           setError(reason.message || "Could not load dashboard data");
           setAuthCode(reason.status || 0);
           if (reason.status === 401) {
             setMfaRequired(reason.mfaRequired === true);
-            setData({});
           }
         })
         .finally(() => {
-          if (active) setLoading(false);
+          if (isCurrent()) setLoading(false);
         });
     }, 220);
     return () => {
@@ -130,6 +138,7 @@ export default function AdminDashboard() {
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    requestVersion.current += 1;
     setLoginError("");
     setLoginBusy(true);
     try {
@@ -146,6 +155,8 @@ export default function AdminDashboard() {
       }
       setLoginPassword("");
       setLoginCode("");
+      setSessionVerified(false);
+      setLoading(true);
       setAuthCode(0);
       setError("");
       setRefreshKey((value) => value + 1);
@@ -158,6 +169,9 @@ export default function AdminDashboard() {
   }
 
   async function logout() {
+    // An earlier dashboard response must not restore access after sign-out.
+    requestVersion.current += 1;
+    setLoading(false);
     setError("");
     try {
       const response = await fetch("/api/admin", {
@@ -170,6 +184,7 @@ export default function AdminDashboard() {
       setData({});
       setLoginPassword("");
       setLoginCode("");
+      setSessionVerified(false);
       setAuthCode(401);
     } catch {
       setError("Could not confirm sign-out. Please try again.");
@@ -205,6 +220,27 @@ export default function AdminDashboard() {
           ) : (
             <>
               <p>{error}</p>
+            </>
+          )}
+        </div>
+      </main>
+    );
+  }
+
+  // Never mount the dashboard until a protected data request has succeeded.
+  // Login success alone is not enough: wait for the new session to be checked.
+  if (!sessionVerified) {
+    return (
+      <main className="admin-gate" aria-busy={loading}>
+        <div className="admin-gate-card">
+          {loading ? <p role="status">စစ်ဆေးနေပါသည်…</p> : (
+            <>
+              <p role="alert">ယာယီ အသုံးမပြုနိုင်ပါ</p>
+              <button className="admin-gate-button" type="button" onClick={() => {
+                setLoading(true);
+                setError("");
+                setRefreshKey((value) => value + 1);
+              }}>ပြန်ကြိုးစားမည်</button>
             </>
           )}
         </div>
