@@ -515,27 +515,6 @@
   .game-launch-spinner { animation-duration: 2s; }
 }
 
-.fab-wrap {
-  padding: 28px 16px 8px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.fab {
-  position: relative;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #2d7eff, #1b5fcc);
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #fff;
-  box-shadow: 0 4px 20px rgba(45, 126, 255, 0.5);
-}
-
 .bottom-navigation {
   position: fixed;
   left: 50%;
@@ -2428,13 +2407,6 @@
   border-color: var(--ui-line);
   background: var(--ui-surface);
   color: var(--ui-muted);
-}
-
-.fab {
-  border: 1px solid var(--ui-line);
-  background: var(--ui-gold);
-  color: var(--ui-gold-ink);
-  box-shadow: 0 3px 10px rgba(111, 73, 10, 0.14);
 }
 
 .bottom-navigation {
