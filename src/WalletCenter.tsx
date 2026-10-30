@@ -78,35 +78,41 @@ function WalletHistory() {
 
 export default function WalletCenter({ initialTab, balance, defaultPhone, onClose, onBalance }: Props) {
   const [activeTab, setActiveTab] = useState<WalletTab>(initialTab);
+  const [depositFullscreen, setDepositFullscreen] = useState(false);
+  const fullscreen = activeTab === "deposit" && depositFullscreen;
 
   return (
-    <section className="wallet-center" aria-label="ငွေကြေးစီမံရန်">
-      <header className="wallet-center-header">
-        <h1>ပိုက်ဆံအိတ်</h1>
-        <button type="button" className="wallet-center-close" onClick={onClose} aria-label="ပိတ်ရန်">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round">
-            <path d="m18 6-12 12M6 6l12 12" />
-          </svg>
-        </button>
-      </header>
+    <section className={`wallet-center${fullscreen ? " deposit-fullscreen" : ""}`} aria-label={fullscreen ? "ငွေသွင်း" : "ငွေကြေးစီမံရန်"}>
+      {!fullscreen ? (
+        <>
+          <header className="wallet-center-header">
+            <h1>ပိုက်ဆံအိတ်</h1>
+            <button type="button" className="wallet-center-close" onClick={onClose} aria-label="ပိတ်ရန်">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round">
+                <path d="m18 6-12 12M6 6l12 12" />
+              </svg>
+            </button>
+          </header>
 
-      <div className="wallet-center-tabs" role="tablist" aria-label="ပိုက်ဆံအိတ် အပိုင်းများ">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.id}
-            className={activeTab === tab.id ? "active" : ""}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+          <div className="wallet-center-tabs" role="tablist" aria-label="ပိုက်ဆံအိတ် အပိုင်းများ">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                className={activeTab === tab.id ? "active" : ""}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
 
       <div className="wallet-center-content">
-        {activeTab === "deposit" ? <DepositFlow embedded onClose={onClose} onBalance={onBalance} /> : null}
+        {activeTab === "deposit" ? <DepositFlow embedded onFullscreenChange={setDepositFullscreen} onClose={onClose} onBalance={onBalance} /> : null}
         {activeTab === "withdraw" ? (
           <Wallet embedded balance={balance} defaultPhone={defaultPhone} onClose={onClose} onBalance={onBalance} />
         ) : null}

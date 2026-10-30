@@ -3348,6 +3348,27 @@
   padding-top: 8px;
 }
 
+.wallet-center.deposit-fullscreen {
+  background: var(--ui-surface);
+}
+
+.wallet-center.deposit-fullscreen .wallet-center-content {
+  padding-top: 0;
+}
+
+.wallet-center.deposit-fullscreen .deposit-pay-white {
+  min-height: 100%;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(32px, env(safe-area-inset-bottom));
+  background: var(--ui-surface);
+}
+
+.wallet-center.deposit-fullscreen .deposit-white-card {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .wallet-center .deposit-flow.wallet-embedded,
 .wallet-center .wallet-sheet.wallet-embedded {
   position: relative;

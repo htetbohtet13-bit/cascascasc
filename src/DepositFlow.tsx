@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { loadWalletMethods, submitDeposit, type PayMethod, type WalletMethods } from "./lib/wallet";
 
 type FlowStep = 1 | 2 | 3 | 4;
@@ -6,6 +6,7 @@ type SubmitStatus = "idle" | "verifying" | "success" | "failed";
 
 type Props = {
   embedded?: boolean;
+  onFullscreenChange?: (fullscreen: boolean) => void;
   onClose: () => void;
   onBalance: (balance: number) => void;
 };
@@ -81,7 +82,7 @@ function IconX() {
   );
 }
 
-export default function DepositFlow({ embedded = false, onClose, onBalance }: Props) {
+export default function DepositFlow({ embedded = false, onFullscreenChange, onClose, onBalance }: Props) {
   const [step, setStep] = useState<FlowStep>(1);
   const [method, setMethod] = useState<PayMethod | null>(null);
   const [amount, setAmount] = useState("");
@@ -104,6 +105,12 @@ export default function DepositFlow({ embedded = false, onClose, onBalance }: Pr
   const paymentAccount = method && config ? config[method] : null;
   const account = paymentAccount?.receiver?.trim() ?? "";
   const receiverName = paymentAccount?.name?.trim() ?? "";
+
+  // Update the surrounding wallet before paint without remounting this flow,
+  // so the bank, amount, receipt input and in-flight verification stay intact.
+  useLayoutEffect(() => {
+    onFullscreenChange?.(step >= 3);
+  }, [step, onFullscreenChange]);
 
   useEffect(() => {
     let active = true;
