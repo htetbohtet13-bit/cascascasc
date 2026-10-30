@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { loadWalletMethods, submitDeposit, type PayMethod, type WalletMethods } from "./lib/wallet";
+import { DepositVerificationPendingError, loadWalletMethods, submitDeposit, type PayMethod, type WalletMethods } from "./lib/wallet";
 
 type FlowStep = 1 | 2 | 3 | 4;
-type SubmitStatus = "idle" | "verifying" | "success" | "failed";
+type SubmitStatus = "idle" | "verifying" | "success" | "failed" | "pending";
 
 type Props = {
   embedded?: boolean;
   onFullscreenChange?: (fullscreen: boolean) => void;
+  onHistory?: () => void;
   onClose: () => void;
   onBalance: (balance: number) => void;
 };
@@ -82,7 +83,7 @@ function IconX() {
   );
 }
 
-export default function DepositFlow({ embedded = false, onFullscreenChange, onClose, onBalance }: Props) {
+export default function DepositFlow({ embedded = false, onFullscreenChange, onHistory, onClose, onBalance }: Props) {
   const [step, setStep] = useState<FlowStep>(1);
   const [method, setMethod] = useState<PayMethod | null>(null);
   const [amount, setAmount] = useState("");
@@ -99,6 +100,7 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onCl
   const [loadingMethods, setLoadingMethods] = useState(true);
   const receiptInputRef = useRef<HTMLInputElement>(null);
   const directingTimer = useRef<number | null>(null);
+  const submissionStarted = useRef(false);
 
   const numericAmount = Number(amount || 0);
   const bank = BANKS.find((item) => item.id === method);
@@ -211,6 +213,7 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onCl
   }
 
   async function confirmDeposit() {
+    if (step !== 3 || submissionStarted.current) return;
     if (!method || numericAmount < 1000) {
       setStep(1);
       return;
@@ -220,6 +223,7 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onCl
       return;
     }
     setMessage(null);
+    submissionStarted.current = true;
     setStep(4);
     setStatus("verifying");
     setRedirectCountdown(3);
@@ -229,7 +233,7 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onCl
       setStatus("success");
       setStatusMessage(result.message || "လက်ကျန်ငွေ ထည့်ပြီးပါပြီ");
     } catch (err) {
-      setStatus("failed");
+      setStatus(err instanceof DepositVerificationPendingError ? "pending" : "failed");
       setStatusMessage(err instanceof Error ? err.message : "ငွေလွှဲမှု မတွေ့ရှိပါ");
     }
   }
@@ -490,6 +494,15 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onCl
                 {numericAmount >= 5000 ? (
                   <div className="deposit-bonus result-bonus">🎁 ဘောနပ်စ်ရှိပါက အလိုအလျောက် ထည့်ပေးပါမည်</div>
                 ) : null}
+              </>
+            ) : null}
+            {status === "pending" ? (
+              <>
+                <div className="deposit-result-icon pending"><IconClock /></div>
+                <h1>ငွေသွင်းမှုကို စစ်ဆေးရန် လိုအပ်ပါသည်</h1>
+                <p>{statusMessage}</p>
+                {onHistory ? <button type="button" className="deposit-primary" onClick={onHistory}>မှတ်တမ်းကြည့်မည်</button> : null}
+                <button type="button" className={onHistory ? "ghost-btn" : "deposit-primary"} onClick={onClose}>ဂိမ်းသို့ပြန်မည်</button>
               </>
             ) : null}
             {status === "failed" ? (

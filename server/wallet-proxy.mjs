@@ -13,7 +13,10 @@ const phoneOf = (value) => {
   return digits;
 };
 const orderId = (prefix) => `${prefix}${randomUUID().replaceAll("-", "")}`.slice(0, 40);
-const providerOf = (value) => value === "wavepay" ? "wave" : value;
+const providerOf = (value) => {
+  const provider = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return provider === "wavepay" ? "wave" : provider;
+};
 const textId = (value) => typeof value === "string" && value.trim().length <= 160 ? value.trim() : "";
 
 function transferMatches(data, { serviceType, amount, phone }) {
@@ -47,7 +50,7 @@ function myanPayExecUrl(baseUrl) {
   return `${base}/api/v1/exec`;
 }
 
-export async function handleWalletProxy({ req, functionName, method = "POST", payload = {} }) {
+export async function handleWalletProxy({ req, functionName, method = "POST", payload = {}, traceId }) {
   const requestError = unsafeRequestError(req);
   if (requestError) return requestError;
   const session = await currentSession(req);
@@ -75,6 +78,10 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
   try {
     const paymentUrl = myanPayExecUrl(config.apiUrl);
     if (functionName === "wallet-deposit") {
+      const trace = traceId ?? randomUUID();
+      const startedAt = Date.now();
+      const log = (event, details = {}) => console.info("Deposit processing", { trace_id: trace, event, duration_ms: Date.now() - startedAt, ...details });
+      const failure = (status, code, error) => ({ status, body: { error, code, trace_id: trace } });
       const transactionId = String(payload.transaction_id ?? "").replace(/\D/g, "");
       if (!/^\d{6}$/.test(transactionId)) return { status: 400, body: { error: "Enter the last 6 digits" } };
       const receiver = serviceType === "kbzpay" ? config.kbzReceiver : config.waveReceiver;
@@ -83,10 +90,13 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       if (limited) return limited;
       let response;
       try {
+        log("verification_started");
         response = await fetch(paymentUrl, {
           method: "POST",
           redirect: "error",
-          signal: AbortSignal.timeout(30000),
+          // Bank history verification can outlive 30 seconds. Leave headroom
+          // inside the 120-second function budget to commit the wallet credit.
+          signal: AbortSignal.timeout(90000),
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${config.apiKey}`,
@@ -100,45 +110,67 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
         });
       } catch (error) {
         const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
-        return {
-          status: timedOut ? 504 : 502,
-          body: {
-            error: timedOut
+        // Log only allowlisted failure categories, never gateway messages,
+        // credentials, phone numbers, sender names or transaction identifiers.
+        const causes = ["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_SOCKET"];
+        const cause = causes.includes(error?.cause?.code) ? error.cause.code : "unavailable";
+        log("verification_connection_failed", { timed_out: timedOut, cause });
+        return failure(timedOut ? 504 : 502, timedOut ? "PAYMENT_CHECK_TIMEOUT" : "PAYMENT_SERVICE_UNREACHABLE", timedOut
               ? "Payment check timed out. Please check the transaction before trying again."
-              : "Could not reach the payment service. Please try again.",
-          },
-        };
+              : "Could not reach the payment service. Please try again.");
       }
 
-      const verified = await response.json().catch(() => ({}));
+      let decoded;
+      try { decoded = await response.json(); } catch { decoded = null; }
+      const verified = decoded && typeof decoded === "object" && !Array.isArray(decoded) ? decoded : {};
+      const tag = String(verified.code ?? verified.message ?? "").trim().toLowerCase();
+      const knownTags = ["verified", "not_found", "account_not_connected", "already_verified", "already_processed", "duplicate", "pending", "processing"];
+      log("verification_response", { upstream_status: response.status, valid_json_object: decoded !== null && decoded === verified,
+        success: verified.success === true, response_tag: knownTags.includes(tag) ? tag : "unrecognized" });
+      if (decoded !== verified) {
+        return failure(502, "PAYMENT_REPLY_INVALID", "The payment service returned an invalid verification response");
+      }
       if (
         !response.ok ||
         verified.success !== true ||
-        String(verified.message ?? "").toLowerCase() !== "verified" ||
+        String(verified.message ?? "").trim().toLowerCase() !== "verified" ||
         !verified.data
       ) {
         const code = String(verified.code ?? verified.message ?? "").toLowerCase();
         if (code === "not_found" || code.includes("not found")) {
-          return { status: 400, body: { error: "Payment not found. Check the transaction digits and try again." } };
+          return failure(400, "PAYMENT_NOT_FOUND", "Payment not found. Check the transaction digits and try again.");
         }
         if (code === "account_not_connected") {
-          return { status: 400, body: { error: "This payment account is not connected. Please contact support." } };
+          return failure(400, "PAYMENT_ACCOUNT_NOT_CONNECTED", "This payment account is not connected. Please contact support.");
         }
-        return { status: response.status >= 500 ? 502 : 400, body: { error: "Payment could not be verified. Please check your receipt or contact support." } };
+        return failure(response.status >= 500 ? 502 : 400, "PAYMENT_VERIFICATION_REJECTED", "Payment could not be verified. Please check your receipt or contact support.");
       }
 
       const fullTransactionId = textId(verified.data.transaction_id);
       const paid = verified.data.amount;
-      if (!fullTransactionId || !fullTransactionId.endsWith(transactionId) ||
-          !Number.isSafeInteger(paid) || paid <= 0 || verified.data.mode !== "direct" ||
-          providerOf(verified.data.provider) !== providerOf(serviceType) ||
-          typeof verified.data.account !== "string" || phoneOf(verified.data.account) !== phoneOf(receiver) ||
-          verified.data.currency !== "MMK") {
-        return { status: 502, body: { error: "The payment service returned an incomplete verification result" } };
+      const invalidFields = [];
+      if (!fullTransactionId) invalidFields.push("transaction_id_type_or_missing");
+      else if (!fullTransactionId.endsWith(transactionId)) invalidFields.push("transaction_id_suffix");
+      if (!Number.isSafeInteger(paid) || paid <= 0) invalidFields.push("amount_type_or_range");
+      if (typeof verified.data.mode !== "string" || verified.data.mode.trim().toLowerCase() !== "direct") invalidFields.push("mode");
+      if (providerOf(verified.data.provider) !== providerOf(serviceType)) invalidFields.push("provider");
+      if (typeof verified.data.account !== "string" || phoneOf(verified.data.account) !== phoneOf(receiver)) invalidFields.push("account");
+      if (typeof verified.data.currency !== "string" || verified.data.currency.trim().toUpperCase() !== "MMK") invalidFields.push("currency");
+      if (invalidFields.length) {
+        log("verification_fields_rejected", { invalid_fields: invalidFields, field_types: {
+          transaction_id: typeof verified.data.transaction_id, amount: typeof paid,
+          mode: typeof verified.data.mode, provider: typeof verified.data.provider,
+          account: typeof verified.data.account, currency: typeof verified.data.currency,
+        } });
+        return failure(502, "PAYMENT_VERIFICATION_INCOMPLETE", "The payment service returned an incomplete verification result");
       }
-      if (paid !== amount) return { status: 400, body: { error: "The payment details do not match. Check your receipt and try again." } };
+      if (paid !== amount) {
+        log("verification_amount_mismatch");
+        return failure(400, "PAYMENT_AMOUNT_MISMATCH", "The payment details do not match. Check your receipt and try again.");
+      }
       let result;
       try {
+        log("wallet_credit_started");
         result = await applyVerifiedDeposit({
           userId,
           orderId: orderId("DEP"),
@@ -149,12 +181,15 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
           depositToken: "",
         });
       } catch (error) {
+        const databaseCodes = ["23505", "23514", "22003", "42501", "42P01", "42703", "40P01", "40001", "57014", "08006"];
+        log("wallet_credit_failed", { database_code: databaseCodes.includes(error?.code) ? error.code : "unavailable" });
         if (error?.code === "23505") {
           return { status: 400, body: { error: "This payment has already been added" } };
         }
-        throw error;
+        return failure(500, "DEPOSIT_CREDIT_FAILED", "Wallet request failed. Please check your wallet history before trying again.");
       }
-      return result.ok ? { status: 200, body: result } : { status: 400, body: { error: result.message } };
+      log(result.ok ? "wallet_credit_completed" : "wallet_credit_rejected");
+      return result.ok ? { status: 200, body: result } : failure(400, "DEPOSIT_CREDIT_REJECTED", result.message);
     }
 
     if (functionName === "wallet-withdraw") {

@@ -33,12 +33,14 @@ const { applyVerifiedDeposit, reserveWithdraw, releaseWithdraw, recordWithdrawTr
 const { createSkmGameSession, processSkmWalletCallback } = await import("../server/skm-wallet.mjs");
 const { handleWalletProxy } = await import("../server/wallet-proxy.mjs");
 const { default: withdrawHandler } = await import("../api/wallet/withdraw.js");
+const { default: depositHandler, config: depositHandlerConfig } = await import("../api/wallet/deposit.js");
 const { handleSkmWallet } = await import("../api/_skm-wallet.js");
 
 async function migration(name) {
   await db.exec((await readFile(new URL(`../neon/${name}`, import.meta.url), "utf8")).replace("create extension if not exists pgcrypto;", ""));
 }
 before(async () => {
+  mock.method(console, "info", () => {});
   for (const name of ["001_app_schema.sql", "005_skm_seamless_wallet.sql", "008_deposit_wagering.sql", "010_money_constraints.sql"]) await migration(name);
 });
 beforeEach(async () => {
@@ -241,6 +243,101 @@ test("gateway verification metadata and amount mismatch never credit or disclose
   assert.equal(await balance(user), "0");
   result = verified(); assert.equal((await proxyDeposit()).status, 200);
   assert.equal(await balance(user), "100");
+});
+
+test("verified deposit tolerates equivalent provider label casing while recording one trace through wallet credit", async (t) => {
+  paymentEnv(t); const user = await player();
+  const logs = [];
+  t.mock.method(console, "info", (...args) => logs.push(args));
+  t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
+    success: true, message: " Verified ", data: { ...verified().data, transaction_id: "01000000000000456789", provider: "KBZPay", mode: "Direct", currency: "mmk", sender: "private-test-sender" },
+  })));
+  const res = response();
+  await depositHandler({ ...req(), body: { service_type: "kbzpay", amount: 100, transaction_id: "456789" } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(await balance(user), "100");
+  assert.equal((await db.query("select transaction_id from public.deposits")).rows[0].transaction_id, "01000000000000456789");
+  assert.match(res.headers["x-deposit-trace-id"], /^[0-9a-f-]{36}$/);
+  const trace = res.headers["x-deposit-trace-id"];
+  assert.ok(logs.every((entry) => entry[1].trace_id === trace));
+  assert.deepEqual(logs.filter((entry) => entry[0] === "Deposit processing").map((entry) => entry[1].event),
+    ["verification_started", "verification_response", "wallet_credit_started", "wallet_credit_completed"]);
+  const logged = JSON.stringify(logs);
+  for (const privateValue of ["test-key", "09123456789", "01000000000000456789", "private-test-sender", user.userId]) assert.ok(!logged.includes(privateValue));
+});
+
+test("a bank check slower than the old deadline retains a response budget and time to commit the deposit", async (t) => {
+  paymentEnv(t); const user = await player();
+  let budget;
+  let clock = Date.now();
+  t.mock.method(Date, "now", () => clock);
+  t.mock.method(AbortSignal, "timeout", (milliseconds) => { budget = milliseconds; return new AbortController().signal; });
+  t.mock.method(globalThis, "fetch", async () => {
+    // Simulate a 45-second bank lookup without making the test wait or call a bank.
+    clock += 45000;
+    if (budget <= 45000) throw new DOMException("Simulated bank check timeout", "TimeoutError");
+    return new Response(JSON.stringify(verified()));
+  });
+  assert.equal((await proxyDeposit()).status, 200);
+  assert.equal(await balance(user), "100");
+  assert.ok(depositHandlerConfig.maxDuration * 1000 >= budget + 20000);
+  const deployed = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
+  assert.equal(deployed.functions["api/wallet/deposit.js"].maxDuration, depositHandlerConfig.maxDuration);
+});
+
+test("incomplete verification logs rejected field names and types without crediting or disclosing values", async (t) => {
+  paymentEnv(t); const user = await player();
+  const logs = [];
+  t.mock.method(console, "info", (...args) => logs.push(args));
+  t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify(verified({ amount: "100", account: undefined }))));
+  const result = await proxyDeposit();
+  assert.equal(result.status, 502);
+  assert.equal(result.body.code, "PAYMENT_VERIFICATION_INCOMPLETE");
+  const rejected = logs.find((entry) => entry[1].event === "verification_fields_rejected")[1];
+  assert.deepEqual(rejected.invalid_fields, ["amount_type_or_range", "account"]);
+  assert.equal(rejected.field_types.amount, "string");
+  assert.equal(rejected.field_types.account, "undefined");
+  assert.ok(!JSON.stringify(logs).includes("0100123456789"));
+  assert.ok(!JSON.stringify(logs).includes("test-key"));
+  assert.equal(await balance(user), "0");
+});
+
+test("HTML or invalid gateway replies and network failures are traceable without inventing a verified deposit", async (t) => {
+  paymentEnv(t); const user = await player();
+  let reply = "<!DOCTYPE html><html>upstream failure</html>";
+  let network = false;
+  const logs = [];
+  t.mock.method(console, "info", (...args) => logs.push(args));
+  t.mock.method(globalThis, "fetch", async () => {
+    if (network) throw Object.assign(new Error("private-upstream-text"), { cause: { code: "private-key-value" } });
+    return new Response(reply, { status: 502 });
+  });
+  for (reply of ["<!DOCTYPE html><html>upstream failure</html>", "null", "[]"]) {
+    const result = await proxyDeposit();
+    assert.equal(result.status, 502);
+    assert.equal(result.body.code, "PAYMENT_REPLY_INVALID");
+  }
+  network = true;
+  assert.equal((await proxyDeposit()).body.code, "PAYMENT_SERVICE_UNREACHABLE");
+  const logged = JSON.stringify(logs);
+  assert.ok(!logged.includes("private-upstream-text"));
+  assert.ok(!logged.includes("private-key-value"));
+  assert.equal(await balance(user), "0");
+});
+
+test("database credit failure after verification is logged and rolled back with an unconfirmed result", async (t) => {
+  paymentEnv(t); const user = await player();
+  const logs = [];
+  t.mock.method(console, "info", (...args) => logs.push(args));
+  t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify(verified())));
+  queryFault = (sql) => { if (sql.includes("insert into public.deposits")) throw Object.assign(new Error("private-db-details"), { code: "42501" }); };
+  const result = await proxyDeposit();
+  assert.equal(result.status, 500);
+  assert.equal(result.body.code, "DEPOSIT_CREDIT_FAILED");
+  assert.ok(logs.some((entry) => entry[1].event === "wallet_credit_failed" && entry[1].database_code === "42501"));
+  assert.ok(!JSON.stringify(logs).includes("private-db-details"));
+  queryFault = undefined;
+  assert.equal(await balance(user), "0");
 });
 
 test("payment limits fail closed before invoking verification", async (t) => {

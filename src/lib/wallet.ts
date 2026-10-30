@@ -56,16 +56,34 @@ export async function loadWalletHistory() {
   return payload.history;
 }
 
+export class DepositVerificationPendingError extends Error {
+  constructor() {
+    super("ငွေသွင်းမှုရလဒ်ကို အတည်မပြုနိုင်သေးပါ။ ငွေထပ်မလွှဲဘဲ မှတ်တမ်းကို စစ်ဆေးပါ။");
+    this.name = "DepositVerificationPendingError";
+  }
+}
+
 export async function submitDeposit(serviceType: PayMethod, amount: number, transactionId: string) {
-  const result = await walletRequest<{ ok: boolean; balance: number; message: string }>("/api/wallet/deposit", {
-    method: "POST",
-    body: JSON.stringify({
-      service_type: serviceType,
-      amount,
-      transaction_id: transactionId,
-    }),
-  });
-  return { ...result, message: "ငွေဖြည့်သွင်းပြီးပါပြီ။" };
+  let response: Response;
+  try {
+    response = await fetch("/api/wallet/deposit", {
+      method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ service_type: serviceType, amount, transaction_id: transactionId }),
+    });
+  } catch {
+    throw new DepositVerificationPendingError();
+  }
+  let decoded: unknown;
+  try { decoded = await response.json(); } catch { throw new DepositVerificationPendingError(); }
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded) || response.status >= 500) {
+    throw new DepositVerificationPendingError();
+  }
+  const result = decoded as { ok?: boolean; balance?: number; error?: string };
+  if (!response.ok || result.error) throw new Error(paymentErrorMessage(result.error));
+  if (result.ok !== true || typeof result.balance !== "number" || !Number.isSafeInteger(result.balance) || result.balance < 0) {
+    throw new DepositVerificationPendingError();
+  }
+  return { ok: true, balance: result.balance, message: "ငွေဖြည့်သွင်းပြီးပါပြီ။" };
 }
 
 export type WithdrawResult = {

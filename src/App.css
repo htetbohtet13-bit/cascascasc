@@ -2042,6 +2042,11 @@
   box-shadow: 0 15px 34px rgba(239, 68, 68, 0.24);
 }
 
+.deposit-result-icon.pending svg {
+  width: 42px;
+  height: 42px;
+}
+
 .deposit-result-amount {
   margin-top: 12px;
   font-family: Inter, system-ui, sans-serif;

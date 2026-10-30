@@ -112,7 +112,7 @@ export default function WalletCenter({ initialTab, balance, defaultPhone, onClos
       ) : null}
 
       <div className="wallet-center-content">
-        {activeTab === "deposit" ? <DepositFlow embedded onFullscreenChange={setDepositFullscreen} onClose={onClose} onBalance={onBalance} /> : null}
+        {activeTab === "deposit" ? <DepositFlow embedded onFullscreenChange={setDepositFullscreen} onHistory={() => setActiveTab("history")} onClose={onClose} onBalance={onBalance} /> : null}
         {activeTab === "withdraw" ? (
           <Wallet embedded balance={balance} defaultPhone={defaultPhone} onClose={onClose} onBalance={onBalance} />
         ) : null}
