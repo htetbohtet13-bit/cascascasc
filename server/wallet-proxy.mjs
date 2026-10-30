@@ -22,7 +22,9 @@ const depositCurrencyOf = (value) => {
   if (typeof value !== "string" || value.length > 32) return "";
   // Ignore display-only direction/zero-width marks, never currency letters,
   // punctuation or internal whitespace. Unknown and missing currencies fail.
-  return value.replace(/[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, "").trim().toUpperCase();
+  const currency = value.replace(/[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, "").trim().toUpperCase();
+  // MyanPay's live verified receipts label Myanmar kyat as "Ks".
+  return currency === "KS" ? "MMK" : currency;
 };
 
 function transferMatches(data, { serviceType, amount, phone }) {

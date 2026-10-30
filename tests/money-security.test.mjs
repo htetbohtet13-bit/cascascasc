@@ -235,9 +235,9 @@ test("gateway verification metadata and amount mismatch never credit or disclose
   let result = verified();
   t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify(result), { status: 200 }));
   for (const changes of [{ provider: "wave" }, { account: "09999999999" }, { currency: "USD" }, { mode: "queue" }, { transaction_id: "different" }, { amount: "100" }]) {
-    result = verified(changes); assert.equal((await proxyDeposit()).status, 502);
+    result = verified({ currency: "Ks", ...changes }); assert.equal((await proxyDeposit()).status, 502);
   }
-  result = verified({ amount: 123456 });
+  result = verified({ currency: "Ks", amount: 123456 });
   const mismatch = await proxyDeposit(1);
   assert.equal(mismatch.status, 400); assert.doesNotMatch(JSON.stringify(mismatch.body), /123456/);
   assert.equal(await balance(user), "0");
@@ -266,11 +266,11 @@ test("verified deposit tolerates equivalent provider label casing while recordin
   for (const privateValue of ["test-key", "09123456789", "01000000000000456789", "private-test-sender", user.userId]) assert.ok(!logged.includes(privateValue));
 });
 
-test("MMK deposits tolerate invisible display marks and never credit the same receipt twice", async (t) => {
+test("MMK and MyanPay Ks deposits tolerate display marks and never credit the same receipt twice", async (t) => {
   paymentEnv(t);
   let result;
   t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify(result)));
-  for (const currency of ["MMK", " mmk ", "\u200BMMK\u200B", "\u200EMMK\u200F", "\u2066MMK\u2069", "\uFEFFMMK", "M\u200BMK"]) {
+  for (const currency of ["MMK", "Ks", " ks ", "\u200EKs\u200F", " mmk ", "\u200BMMK\u200B", "\u200EMMK\u200F", "\u2066MMK\u2069", "\uFEFFMMK", "M\u200BMK"]) {
     const user = await player();
     result = verified({ currency, transaction_id: `${randomUUID()}456789` });
     assert.equal((await proxyDeposit()).status, 200);
@@ -286,7 +286,7 @@ test("unknown, missing and malformed deposit currencies stay rejected with bound
   const logs = [];
   t.mock.method(console, "info", (...args) => logs.push(args));
   t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify(result)));
-  for (const currency of [undefined, null, "", "USD", "\u200BUSD\u200B", "MMKUSD", "M MK", "MMK\u0000", "ＭＭＫ", "MMK" + "\u200B".repeat(33)]) {
+  for (const currency of [undefined, null, "", "USD", "\u200BUSD\u200B", "MMKUSD", "KsUSD", "K s", "Ks\u0000", "M MK", "MMK\u0000", "ＭＭＫ", "MMK" + "\u200B".repeat(33)]) {
     result = verified({ currency });
     assert.equal((await proxyDeposit()).status, 502);
     assert.equal(await balance(user), "0");
