@@ -4546,3 +4546,28 @@
 @media (prefers-reduced-motion: reduce) {
   .payment-result-card, .payment-result-check, .payment-result-spinner { animation: none; }
 }
+.admin-range-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; max-width: 540px; margin-bottom: 12px; padding: 4px; border: 1px solid #e7dfd2; border-radius: 12px; background: #f3eddf; }
+.admin-range-row button { min-width: 0; min-height: 34px; padding: 7px 4px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #82735c; font-family: inherit; font-size: 11px; font-weight: 650; white-space: nowrap; cursor: pointer; }
+.admin-range-row button.active { border-color: #e0c478; background: #fffaf0; color: #765619; box-shadow: 0 2px 5px #5b3d0c0a; }
+.admin-range-row button:focus-visible { outline: 2px solid #ad822d; outline-offset: 2px; }
+.admin-period-summary { padding: 18px 20px 21px; border: 1px solid #e7dfd2; border-radius: 14px; background: #fffdf9; }
+.admin-period-summary header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.admin-period-summary h2 { margin: 0; color: #483720; font-size: 15px; font-weight: 700; }
+.admin-period-summary header > span { color: #9b8a70; font-size: 10px; }
+.admin-period-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 20px; text-align: center; }
+.admin-period-metrics > div { min-width: 0; }
+.admin-period-metrics > div + div { border-left: 1px solid #f0eadf; }
+.admin-period-metrics span { display: block; color: #8a7b64; font-size: 12px; }
+.admin-period-metrics strong { display: block; margin-top: 7px; font-size: clamp(15px, 2.5vw, 22px); font-weight: 750; line-height: 1.5; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.admin-period-metrics .positive { color: #15824d; }
+.admin-period-metrics .outgoing { color: #c66a27; }
+.admin-period-metrics .new-users { color: #346eaf; }
+@media (max-width: 480px) {
+  .admin-range-row { gap: 2px; }
+  .admin-range-row button { font-size: 10px; }
+  .admin-period-summary { padding: 14px 10px 17px; }
+  .admin-period-summary h2 { font-size: 13px; }
+  .admin-period-metrics { gap: 3px; margin-top: 17px; }
+  .admin-period-metrics span { font-size: 9px; }
+  .admin-period-metrics strong { font-size: 14px; }
+}

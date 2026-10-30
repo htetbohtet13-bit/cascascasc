@@ -72,6 +72,56 @@ function componentHarness(fetchResult, { authenticated = false } = {}) {
   } };
 }
 
+function overviewView(app) {
+  const overview = findElement(app.render(), (node) => typeof node.type === "function" && node.type.name === "Overview");
+  assert.ok(overview);
+  return overview.type(overview.props);
+}
+function treeText(tree) {
+  if (typeof tree === "string" || typeof tree === "number") return String(tree);
+  if (Array.isArray(tree)) return tree.map(treeText).join("");
+  return tree && typeof tree === "object" ? treeText(tree.props?.children) : "";
+}
+function rangeButton(app, label) {
+  return findElement(overviewView(app), (node) => node.type === "button" && treeText(node) === label);
+}
+
+test("overview replaces the intro with five range controls and sends the selected range to the protected API", async () => {
+  const app = componentHarness((url) => ({ ok: true, status: 200, json: async () => ({ summary: { deposit_total: 5000, withdrawal_total: 1000, net_cash_flow: 4000, new_users: 3 } }) }), { authenticated: true });
+  await app.load();
+  const view = overviewView(app);
+  assert.ok(!treeText(view).includes("Casino activity at a glance"));
+  assert.ok(!treeText(view).includes("BUSINESS OVERVIEW"));
+  for (const label of ["Today", "Yesterday", "This week", "This month", "All"]) assert.ok(rangeButton(app, label));
+  assert.equal(rangeButton(app, "Today").props["aria-pressed"], true);
+  assert.equal(new URL(app.calls[0][0], "https://example.invalid").searchParams.get("range"), "today");
+  rangeButton(app, "Yesterday").props.onClick();
+  assert.equal(findElement(overviewView(app), (node) => node.props?.className === "admin-period-summary").props["aria-busy"], true);
+  await app.load();
+  assert.equal(new URL(app.calls.at(-1)[0], "https://example.invalid").searchParams.get("range"), "yesterday");
+  assert.equal(rangeButton(app, "Yesterday").props["aria-pressed"], true);
+  assert.ok(treeText(overviewView(app)).includes("Yesterday summary"));
+  assert.ok(treeText(overviewView(app)).includes("5,000 Ks"));
+  assert.ok(treeText(overviewView(app)).includes("+4,000 Ks"));
+});
+
+test("a slow previous date-range response cannot overwrite the most recently selected range", async () => {
+  const pending = new Map();
+  const app = componentHarness((url) => new Promise((resolve) => pending.set(new URL(url, "https://example.invalid").searchParams.get("range"), resolve)), { authenticated: true });
+  await app.load();
+  rangeButton(app, "Yesterday").props.onClick(); app.render(); await app.load();
+  rangeButton(app, "This week").props.onClick(); app.render(); await app.load();
+  const week = { summary: { deposit_total: 7000 } };
+  pending.get("week")({ ok: true, status: 200, json: async () => week });
+  await new Promise(setImmediate);
+  const yesterday = { summary: { deposit_total: 999999 } };
+  pending.get("yesterday")({ ok: true, status: 200, json: async () => yesterday });
+  await new Promise(setImmediate);
+  assert.ok(app.states.includes(week)); assert.ok(!app.states.includes(yesterday));
+  assert.ok(treeText(overviewView(app)).includes("7,000 Ks"));
+  assert.equal(rangeButton(app, "This week").props["aria-pressed"], true);
+});
+
 test("admin logout retains records and displays an error when revocation returns HTTP 503", async () => {
   const app = componentHarness(() => ({ ok: false, status: 503 }), { authenticated: true });
   await app.load();

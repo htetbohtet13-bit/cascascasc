@@ -1,6 +1,14 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 
 type Section = "overview" | "users" | "games" | "bets" | "deposits" | "withdrawals";
+type OverviewRange = "today" | "yesterday" | "week" | "month" | "all";
+const OVERVIEW_RANGES: { id: OverviewRange; label: string; title: string }[] = [
+  { id: "today", label: "Today", title: "Today summary" },
+  { id: "yesterday", label: "Yesterday", title: "Yesterday summary" },
+  { id: "week", label: "This week", title: "This week summary" },
+  { id: "month", label: "This month", title: "This month summary" },
+  { id: "all", label: "All", title: "All-time summary" },
+];
 type UserRow = { id: string; phone: string; balance: number | string; created_at: string };
 type BetRow = {
   bet_uid: string; round_id: string | null; bet: number | string; win: number | string;
@@ -63,6 +71,7 @@ export default function AdminDashboard() {
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [overviewRange, setOverviewRange] = useState<OverviewRange>("today");
   const [data, setData] = useState<Payload | UserDetail>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -83,6 +92,7 @@ export default function AdminDashboard() {
       const view = selectedUserId ? "user" : section;
       const params = new URLSearchParams({ view });
       if (selectedUserId) params.set("user_id", selectedUserId);
+      if (section === "overview" && !selectedUserId) params.set("range", overviewRange);
       if (section !== "overview" && !selectedUserId) {
         params.set("page", String(page));
         if (search.trim()) params.set("search", search.trim());
@@ -126,7 +136,7 @@ export default function AdminDashboard() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [section, selectedUserId, search, status, page, refreshKey]);
+  }, [section, selectedUserId, search, status, page, refreshKey, overviewRange]);
 
   function changeSection(next: Section) {
     setSection(next);
@@ -299,7 +309,7 @@ export default function AdminDashboard() {
             </div>
           </div>
         ) : section === "overview" ? (
-          <Overview data={data} loading={loading} onOpen={changeSection} />
+          <Overview data={data} loading={loading} onOpen={changeSection} range={overviewRange} onRangeChange={(next) => { if (next === overviewRange) return; requestVersion.current += 1; setLoading(true); setOverviewRange(next); }} />
         ) : section === "games" ? (
           <div className="admin-page-content"><ProviderGames games={(data as Payload).games ?? []} loading={loading} settingsConfigured={(data as Payload).settingsConfigured !== false} onSaved={() => setRefreshKey((value) => value + 1)} /></div>
         ) : (
@@ -326,19 +336,30 @@ export default function AdminDashboard() {
   );
 }
 
-function Overview({ data, loading, onOpen }: { data: Payload; loading: boolean; onOpen: (section: Section) => void }) {
+function Overview({ data, loading, onOpen, range, onRangeChange }: { data: Payload; loading: boolean; onOpen: (section: Section) => void; range: OverviewRange; onRangeChange: (range: OverviewRange) => void }) {
   const summary = data.summary ?? {};
+  const rangeTitle = OVERVIEW_RANGES.find((item) => item.id === range)?.title;
   const cards = [
-    ["Players", summary.users, "New today", summary.new_users_today, "users"],
-    ["Total player balance", money(summary.total_balance), "All active wallets", "", "users"],
+    ["Total players", summary.users, "Live total", "All accounts", "users"],
+    ["Current player balance", money(summary.total_balance), "Live total", "All wallets", "users"],
     ["Bet volume", money(summary.bet_total), "Payouts", money(summary.win_total), "bets"],
-    ["Deposits", money(summary.deposit_total), "Transactions", summary.deposit_count, "deposits"],
-    ["Withdrawals paid", money(summary.withdrawal_total), "Pending requests", summary.pending_withdrawals, "withdrawals"],
+    ["Pending withdrawals", summary.pending_withdrawals, "Failed in range", summary.failed_withdrawals, "withdrawals"],
     ["Game catalog", summary.active_games, "Total games", summary.games_total, "games"],
   ] as const;
   return (
     <div className="admin-page-content">
-      <div className="admin-welcome"><div><span>BUSINESS OVERVIEW</span><h2>Casino activity at a glance</h2><p>Player accounts, game activity, and wallet movement.</p></div><div className="admin-welcome-icon">✦</div></div>
+      <div className="admin-range-row" role="group" aria-label="Overview time range">
+        {OVERVIEW_RANGES.map((item) => <button key={item.id} type="button" aria-pressed={range === item.id} className={range === item.id ? "active" : ""} onClick={() => onRangeChange(item.id)}>{item.label}</button>)}
+      </div>
+      <section className="admin-period-summary" aria-label={rangeTitle} aria-busy={loading}>
+        <header><h2>{rangeTitle}</h2><span>Myanmar time</span></header>
+        <div className="admin-period-metrics">
+          <div><span>Deposits</span><strong className="positive">{loading ? "—" : money(summary.deposit_total)}</strong></div>
+          <div><span>Withdrawals</span><strong className="outgoing">{loading ? "—" : money(summary.withdrawal_total)}</strong></div>
+          <div title="Verified deposits minus paid withdrawals"><span>Net cash flow</span><strong className={Number(summary.net_cash_flow ?? 0) >= 0 ? "positive" : "outgoing"}>{loading ? "—" : `${Number(summary.net_cash_flow ?? 0) >= 0 ? "+" : ""}${money(summary.net_cash_flow)}`}</strong></div>
+          <div><span>New users</span><strong className="new-users">{loading ? "—" : Number(summary.new_users ?? 0).toLocaleString("en-US")}</strong></div>
+        </div>
+      </section>
       <div className="admin-stat-grid">
         {cards.map(([label, value, note, sub, target]) => (
           <button key={label} className="admin-stat-card" type="button" onClick={() => onOpen(target as Section)}>

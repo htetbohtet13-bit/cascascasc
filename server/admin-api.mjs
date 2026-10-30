@@ -5,6 +5,7 @@ import { applyGameDisplaySettings } from "./game-display.mjs";
 import { unsafeRequestError } from "./request-security.mjs";
 import { consumeRateLimit } from "./rate-limit.mjs";
 import { adminMfaConfig, adminSessionKey, claimAdminTotp, matchingAdminTotpStep } from "./admin-mfa.mjs";
+import { overviewWindow, readAdminOverview } from "./admin-overview.mjs";
 
 const PAGE_SIZE = 50;
 const MAX_PAGE = 1_000_000;
@@ -187,34 +188,8 @@ function pageParams(url) {
   return { page, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE };
 }
 
-async function overview(pool) {
-  const result = await pool.query(
-    `select
-       (select count(*) from public.profiles) as users,
-       (select count(*) from public.profiles where created_at >= date_trunc('day', now())) as new_users_today,
-       (select coalesce(sum(balance + balance_minor::numeric / 100), 0) from public.profiles) as total_balance,
-       (select count(*) from public.slot_bets) as bet_count,
-       (select coalesce(sum(bet), 0) from public.slot_bets) as bet_total,
-       (select coalesce(sum(win), 0) from public.slot_bets) as win_total,
-       (select count(*) from public.deposits) as deposit_count,
-       (select coalesce(sum(amount), 0) from public.deposits where status = 'verified') as deposit_total,
-       (select count(*) from public.withdrawals) as withdrawal_count,
-       (select count(*) from public.withdrawals where status = 'pending') as pending_withdrawals,
-       (select coalesce(sum(amount), 0) from public.withdrawals where status = 'paid') as withdrawal_total,
-       (select count(*) from public.withdrawals where status = 'failed') as failed_withdrawals`,
-  );
-  const [latestWithdrawals, latestBets] = await Promise.all([
-    pool.query(
-      `select w.order_id, w.user_id, p.phone, w.service_type, w.amount, w.status, w.created_at
-         from public.withdrawals w join public.profiles p on p.id = w.user_id
-        order by w.created_at desc limit 8`,
-    ),
-    pool.query(
-      `select b.bet_uid, b.round_id, b.bet, b.win, b.created_at, p.id as user_id, p.phone
-         from public.slot_bets b join public.profiles p on p.id = b.user_id
-        order by b.created_at desc limit 8`,
-    ),
-  ]);
+async function overview(pool, range) {
+  const result = await readAdminOverview(pool, range);
   let gameCount = null;
   try {
     gameCount = (await listProviderGames()).length;
@@ -222,9 +197,8 @@ async function overview(pool) {
     console.error("Admin provider game list lookup failed", error);
   }
   return {
-    summary: { ...result.rows[0], games_total: gameCount, active_games: gameCount },
-    latestWithdrawals: latestWithdrawals.rows,
-    latestBets: latestBets.rows,
+    ...result,
+    summary: { ...result.summary, games_total: gameCount, active_games: gameCount },
   };
 }
 
@@ -383,7 +357,11 @@ async function adminRequest(req) {
   const pool = getPool();
 
   try {
-    if (view === "overview") return { status: 200, body: await overview(pool) };
+    if (view === "overview") {
+      const range = overviewWindow(url.searchParams.get("range") || "today");
+      if (!range) return { status: 400, body: { error: "Choose a valid overview date range" } };
+      return { status: 200, body: await overview(pool, range) };
+    }
     if (view === "users") return { status: 200, body: await users(pool, url) };
     if (view === "games") {
       const providerGames = await listProviderGames({ refresh: true });
