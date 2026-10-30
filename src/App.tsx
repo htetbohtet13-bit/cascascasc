@@ -3,6 +3,7 @@ import { authenticate, getSession, signOut } from "./lib/auth";
 import { launchGame, loadGames, loadSlotBets, type Game, type SlotBet } from "./lib/game";
 import WalletCenter from "./WalletCenter";
 import AdminDashboard from "./AdminDashboard";
+import GameHistory from "./GameHistory";
 
 type Mode = "signin" | "signup";
 type NavTab = "cashier" | "games" | "bonuses" | "profile";
@@ -486,25 +487,7 @@ export default function App() {
                     <span>{bets.length ? `${bets.length} ကြိမ်` : ""}</span>
                   </div>
                   {bets.length ? (
-                    <div className="profile-activity-list">
-                      {bets.slice(0, 5).map((bet) => (
-                        <div className="profile-activity-row" key={bet.bet_uid}>
-                          <div className="profile-activity-game">
-                            <span className="profile-activity-icon">{Ic.games}</span>
-                            <span>
-                              <strong>{bet.game_id ? `Game ${bet.game_id}` : "ဂိမ်း"}</strong>
-                              <small>{bet.created_at ? new Date(bet.created_at).toLocaleDateString("en-US") : ""}</small>
-                            </span>
-                          </div>
-                          <div className="profile-activity-amounts">
-                            <span>လောင်း {Number(bet.bet).toLocaleString("en-US")} Ks</span>
-                            <strong className={Number(bet.win) > 0 ? "won" : ""}>
-                              {Number(bet.win) > 0 ? "+" : ""}{Number(bet.win).toLocaleString("en-US")} Ks
-                            </strong>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <GameHistory bets={bets} games={games} icon={Ic.games} />
                   ) : (
                     <div className="profile-activity-empty">
                       <p>ကစားမှုမှတ်တမ်း မရှိသေးပါ</p>

@@ -6,6 +6,7 @@ import { unsafeRequestError } from "./request-security.mjs";
 import { consumeRateLimit } from "./rate-limit.mjs";
 import { adminMfaConfig, adminSessionKey, claimAdminTotp, matchingAdminTotpStep } from "./admin-mfa.mjs";
 import { overviewWindow, readAdminOverview } from "./admin-overview.mjs";
+import { adminGameHistory, playerGameHistory } from "./game-history.mjs";
 
 const PAGE_SIZE = 50;
 const MAX_PAGE = 1_000_000;
@@ -226,24 +227,7 @@ async function users(pool, url) {
 async function bets(pool, url) {
   const { page, limit, offset } = pageParams(url);
   const search = (url.searchParams.get("search") || "").trim().slice(0, 100);
-  const pattern = `%${search}%`;
-  const [list, count] = await Promise.all([
-    pool.query(
-      `select b.bet_uid, b.round_id, b.bet, b.win, b.changemoney, b.balance_after,
-              b.game_id, b.room_id, b.created_at, p.id as user_id, p.phone
-         from public.slot_bets b join public.profiles p on p.id = b.user_id
-        where $1 = '' or p.phone ilike $2 or p.id::text ilike $2 or b.bet_uid ilike $2 or b.round_id ilike $2
-        order by b.created_at desc limit $3 offset $4`,
-      [search, pattern, limit, offset],
-    ),
-    pool.query(
-      `select count(*) as total
-         from public.slot_bets b join public.profiles p on p.id = b.user_id
-        where $1 = '' or p.phone ilike $2 or p.id::text ilike $2 or b.bet_uid ilike $2 or b.round_id ilike $2`,
-      [search, pattern],
-    ),
-  ]);
-  return { bets: list.rows, total: Number(count.rows[0]?.total ?? 0), page, pageSize: limit };
+  return adminGameHistory(pool, { page, limit, offset, search });
 }
 
 async function walletList(pool, url, kind) {
@@ -278,12 +262,12 @@ async function userDetails(pool, userId) {
   if (!UUID_RE.test(userId)) return { status: 400, body: { error: "Invalid user id" } };
   const [profile, bets, deposits, withdrawals] = await Promise.all([
     pool.query("select id, phone, balance + balance_minor::numeric / 100 as balance, created_at from public.profiles where id = $1::uuid", [userId]),
-    pool.query("select bet_uid, round_id, bet, win, changemoney, balance_after, game_id, room_id, created_at from public.slot_bets where user_id = $1::uuid order by created_at desc limit 25", [userId]),
+    playerGameHistory(pool, userId, 25),
     pool.query("select order_id, service_type, amount, transaction_id, status, message, created_at, completed_at from public.deposits where user_id = $1::uuid order by created_at desc limit 25", [userId]),
     pool.query("select order_id, service_type, amount, payout_phone, provider_txn_id, status, message, created_at, completed_at from public.withdrawals where user_id = $1::uuid order by created_at desc limit 25", [userId]),
   ]);
   if (!profile.rowCount) return { status: 404, body: { error: "User not found" } };
-  return { user: profile.rows[0], bets: bets.rows, deposits: deposits.rows, withdrawals: withdrawals.rows };
+  return { user: profile.rows[0], bets, deposits: deposits.rows, withdrawals: withdrawals.rows };
 }
 
 export async function handleAdminApi(req) {

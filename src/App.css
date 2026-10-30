@@ -4571,3 +4571,8 @@
   .admin-period-metrics span { font-size: 9px; }
   .admin-period-metrics strong { font-size: 14px; }
 }
+.profile-activity-amounts strong.lost, .admin-table .admin-loss { color: #b04938; }
+.admin-status.settled { background: #e9f4ec; color: #267347; }
+.admin-status.cancelled { background: #f1eeea; color: #877d70; }
+.admin-report-note { margin: 10px 0 0; color: #8c7d67; font-size: 10px; line-height: 1.7; }
+.profile-activity-game strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

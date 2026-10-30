@@ -28,10 +28,18 @@ export type Game = {
 export type SlotBet = {
   bet_uid: string;
   round_id: string | null;
-  bet: number;
-  win: number;
-  changemoney: number;
-  balance_after: number;
+  bet: number | string;
+  win: number | string | null;
+  changemoney: number | string | null;
+  balance_after: number | string;
+  transaction_id?: string;
+  source?: "skm" | "legacy";
+  game_code?: string | null;
+  activity_type?: "bet" | "banker";
+  status?: "settled" | "pending" | "cancelled";
+  held_amount?: number | string;
+  returned_amount?: number | string | null;
+  settled_at?: string | null;
   game_id: number | null;
   created_at: string;
 };

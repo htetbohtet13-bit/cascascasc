@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { after, before, test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
+import { adminGameHistory, playerGameHistory } from "../server/game-history.mjs";
 
 const db = new PGlite();
 async function migration(name) {
@@ -49,6 +50,8 @@ test("runtime can perform required app writes, but cannot drop/create tables or 
     await db.query("insert into public.auth_rate_limits(scope,key_hash,attempts,expires_at) values('test',$1,1,now()+interval '1 minute')", ["a".repeat(64)]);
     await db.query("insert into public.wallet_wagering_events(user_id,kind,amount,source_id,state) values($1::uuid,'DEPOSIT',1000,'role-test','SETTLED')", [userId]);
     assert.equal((await db.query("select count(*)::int as count from public.wallet_wagering_events")).rows[0].count, 1);
+    assert.equal((await playerGameHistory(db, userId)).length, 0);
+    assert.equal((await adminGameHistory(db, { search: "", page: 1, limit: 50, offset: 0 })).total, 0);
     for (const sql of ["delete from public.profiles", "drop table public.profiles", "create table public.unauthorized_table(id integer)"]) {
       await assert.rejects(() => db.query(sql), (error) => error.code === "42501");
     }

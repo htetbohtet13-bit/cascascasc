@@ -10,6 +10,10 @@ const source = await readFile(new URL("../src/AdminDashboard.tsx", import.meta.u
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
 }).outputText;
+const moneyExports = {};
+runInNewContext(ts.transpileModule(await readFile(new URL("../src/lib/format-money.ts", import.meta.url), "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText, { exports: moneyExports });
 
 function findElement(tree, predicate) {
   if (!tree || typeof tree !== "object") return null;
@@ -50,6 +54,7 @@ function componentHarness(fetchResult, { authenticated = false } = {}) {
     require(name) {
       if (name === "react") return react;
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
+      if (name === "./lib/format-money") return moneyExports;
       throw new Error(`Unexpected component import: ${name}`);
     },
     fetch: async (...args) => {

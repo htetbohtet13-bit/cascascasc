@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
+import { formatMoney } from "./lib/format-money";
 
 type Section = "overview" | "users" | "games" | "bets" | "deposits" | "withdrawals";
 type OverviewRange = "today" | "yesterday" | "week" | "month" | "all";
@@ -11,8 +12,10 @@ const OVERVIEW_RANGES: { id: OverviewRange; label: string; title: string }[] = [
 ];
 type UserRow = { id: string; phone: string; balance: number | string; created_at: string };
 type BetRow = {
-  bet_uid: string; round_id: string | null; bet: number | string; win: number | string;
-  changemoney?: number | string; balance_after?: number | string; game_id?: number | null;
+  bet_uid: string; round_id: string | null; bet: number | string; win: number | string | null;
+  changemoney?: number | string | null; balance_after?: number | string; game_id?: number | null;
+  game_code?: string | null; activity_type?: "bet" | "banker"; status?: "settled" | "pending" | "cancelled";
+  held_amount?: number | string; transaction_id?: string; source?: "skm" | "legacy"; settled_at?: string | null;
   created_at: string; user_id: string; phone: string;
 };
 type WalletRow = {
@@ -47,13 +50,13 @@ const SECTIONS: { id: Section; label: string; mark: string }[] = [
 ];
 
 function money(value: number | string | null | undefined) {
-  return `${Number(value ?? 0).toLocaleString("en-US")} Ks`;
+  return `${formatMoney(value ?? 0)} Ks`;
 }
 
 function date(value: string | null | undefined) {
   if (!value) return "—";
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "—" : parsed.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+  return Number.isNaN(parsed.getTime()) ? "—" : parsed.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Rangoon" });
 }
 
 function Status({ value }: { value: string }) {
@@ -342,7 +345,7 @@ function Overview({ data, loading, onOpen, range, onRangeChange }: { data: Paylo
   const cards = [
     ["Total players", summary.users, "Live total", "All accounts", "users"],
     ["Current player balance", money(summary.total_balance), "Live total", "All wallets", "users"],
-    ["Bet volume", money(summary.bet_total), "Payouts", money(summary.win_total), "bets"],
+    ["Settled bet volume", money(summary.bet_total), "Reported wins", money(summary.win_total), "bets"],
     ["Pending withdrawals", summary.pending_withdrawals, "Failed in range", summary.failed_withdrawals, "withdrawals"],
     ["Game catalog", summary.active_games, "Total games", summary.games_total, "games"],
   ] as const;
@@ -366,10 +369,12 @@ function Overview({ data, loading, onOpen, range, onRangeChange }: { data: Paylo
             <span>{label}</span><strong>{loading ? "—" : typeof value === "number" || typeof value === "string" ? value : "0"}</strong><small>{note}: {sub || "—"}</small>
           </button>
         ))}
-        <button className="admin-stat-card" type="button" onClick={() => onOpen("bets")}><span>Bet records</span><strong>{loading ? "—" : Number(summary.bet_count ?? 0).toLocaleString()}</strong><small>Open bet history</small></button>
+        <button className="admin-stat-card" type="button" onClick={() => onOpen("bets")}><span>Bet records</span><strong>{loading ? "—" : Number(summary.bet_count ?? 0).toLocaleString()}</strong><small>Pending: {Number(summary.pending_bet_count ?? 0).toLocaleString()} · Cancelled: {Number(summary.cancelled_bet_count ?? 0).toLocaleString()}</small></button>
+        {Number(summary.banker_count ?? 0) > 0 ? <button className="admin-stat-card" type="button" onClick={() => onOpen("bets")}><span>Banker net result</span><strong>{loading ? "—" : money(summary.banker_result)}</strong><small>Bank returns minus reserved funds</small></button> : null}
       </div>
+      <p className="admin-report-note">Bet volume and wins include settled bets only, by settlement time in Myanmar. Banker activity is separate.</p>
       <div className="admin-overview-columns">
-        <section className="admin-panel"><div className="admin-panel-heading"><div><span>LATEST ACTIVITY</span><h3>Recent bets</h3></div><button type="button" onClick={() => onOpen("bets")}>View all</button></div><BetsTable bets={data.latestBets ?? []} loading={loading} onSelect={() => {}} compact /></section>
+        <section className="admin-panel"><div className="admin-panel-heading"><div><span>LATEST ACTIVITY</span><h3>Recent game activity</h3></div><button type="button" onClick={() => onOpen("bets")}>View all</button></div><BetsTable bets={data.latestBets ?? []} loading={loading} onSelect={() => {}} compact /></section>
         <section className="admin-panel"><div className="admin-panel-heading"><div><span>WALLET QUEUE</span><h3>Recent withdrawals</h3></div><button type="button" onClick={() => onOpen("withdrawals")}>View all</button></div><WalletTable rows={data.latestWithdrawals ?? []} loading={loading} onSelect={() => {}} kind="withdrawal" compact /></section>
       </div>
     </div>
@@ -579,7 +584,14 @@ function UsersTable({ users, loading, onSelect }: { users: UserRow[]; loading: b
 
 function BetsTable({ bets, loading, onSelect, compact = false }: { bets: BetRow[]; loading: boolean; onSelect: (id: string) => void; compact?: boolean }) {
   if (!bets.length) return <TableEmpty loading={loading} />;
-  return <div className={`admin-table-wrap${compact ? " compact" : ""}`}><table className="admin-table"><thead><tr><th>Player</th><th>Bet</th><th>Win</th><th>Round</th><th>Date</th></tr></thead><tbody>{bets.map((bet) => <tr key={bet.bet_uid}><td><button type="button" className="admin-player-link" onClick={() => onSelect(bet.user_id)}>{bet.phone}</button><small>{bet.bet_uid}</small></td><td className="admin-number">{money(bet.bet)}</td><td className="admin-number admin-win">{money(bet.win)}</td><td>{bet.round_id || "—"}</td><td>{date(bet.created_at)}</td></tr>)}</tbody></table></div>;
+  return <div className={`admin-table-wrap${compact ? " compact" : ""}`}><table className="admin-table"><thead><tr><th>Player</th><th>Game / round</th><th>Stake / reserve</th><th title="Credit minus unused reserve; can be negative for multiplier losses">Win</th><th>Net result</th><th>Status</th><th>Date</th></tr></thead><tbody>{bets.map((bet) => <tr key={bet.bet_uid}>
+    <td><button type="button" className="admin-player-link" onClick={() => onSelect(bet.user_id)}>{bet.phone}</button><small>{bet.transaction_id ?? bet.bet_uid}</small></td>
+    <td>{bet.game_code ?? (bet.game_id ? `Game ${bet.game_id}` : "Legacy game")}<small>{bet.activity_type === "banker" ? "Banker · " : ""}{bet.round_id || "—"}</small></td>
+    <td className="admin-number">{money(bet.activity_type === "banker" ? bet.held_amount : bet.bet)}<small>{bet.activity_type === "banker" ? "Reserved bank" : Number(bet.held_amount) > Number(bet.bet) ? `Held: ${money(bet.held_amount)}` : "Stake"}</small></td>
+    <td className="admin-number">{bet.win == null ? "—" : money(bet.win)}</td>
+    <td className={`admin-number${Number(bet.changemoney) > 0 ? " admin-win" : Number(bet.changemoney) < 0 ? " admin-loss" : ""}`}>{bet.changemoney == null ? "—" : money(bet.changemoney)}</td>
+    <td><Status value={bet.status ?? "settled"} /></td><td>{date(bet.created_at)}{bet.settled_at && !compact ? <small>Closed: {date(bet.settled_at)}</small> : null}</td>
+  </tr>)}</tbody></table></div>;
 }
 
 function WalletTable({ rows, loading, onSelect, kind, compact = false }: { rows: WalletRow[]; loading: boolean; onSelect: (id: string) => void; kind: "deposit" | "withdrawal"; compact?: boolean }) {
@@ -588,7 +600,7 @@ function WalletTable({ rows, loading, onSelect, kind, compact = false }: { rows:
 }
 
 function DetailBets({ bets }: { bets: BetRow[] }) {
-  return <section className="admin-panel"><div className="admin-panel-heading"><div><span>PLAYER ACTIVITY</span><h3>Recent bets</h3></div></div>{bets.length ? <div className="admin-detail-records">{bets.map((bet) => <div key={bet.bet_uid}><span>{date(bet.created_at)}<small>Round {bet.round_id || "—"}</small></span><strong>Bet {money(bet.bet)}<small>Win {money(bet.win)}</small></strong></div>)}</div> : <TableEmpty loading={false} />}</section>;
+  return <section className="admin-panel"><div className="admin-panel-heading"><div><span>PLAYER ACTIVITY</span><h3>Recent game activity</h3></div></div>{bets.length ? <div className="admin-detail-records">{bets.map((bet) => <div key={bet.bet_uid}><span>{bet.game_code ?? "Legacy game"}<small>{date(bet.created_at)} · {bet.status ?? "settled"}</small><small>Round {bet.round_id || "—"}</small></span><strong>{bet.activity_type === "banker" ? `Reserved ${money(bet.held_amount)}` : `Stake ${money(bet.bet)}`}<small>Net {bet.changemoney == null ? "—" : money(bet.changemoney)}</small></strong></div>)}</div> : <TableEmpty loading={false} />}</section>;
 }
 
 function DetailWallet({ title, rows }: { title: string; rows: WalletRow[] }) {
