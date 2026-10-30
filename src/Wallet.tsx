@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { loadWalletMethods, submitWithdraw, WalletRequestError, type PayMethod } from "./lib/wallet";
 
 type Props = {
@@ -16,6 +16,11 @@ const methods: { id: PayMethod; name: string; img: string; cls: string }[] = [
 
 const quickAmounts = ["1000", "2000", "4000"];
 
+function localPhone(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return digits.startsWith("959") ? `0${digits.slice(2)}` : digits;
+}
+
 export default function Wallet({
   embedded = false,
   balance = 0,
@@ -26,13 +31,18 @@ export default function Wallet({
   const [step, setStep] = useState(1);
   const [method, setMethod] = useState<PayMethod | null>(null);
   const [amount, setAmount] = useState("");
-  const [phone, setPhone] = useState(defaultPhone.replace(/^\+95/, "0"));
+  const [phone, setPhone] = useState(() => localPhone(defaultPhone));
+  // Display-only: never include this name in requests or persistent storage.
+  const [accountName, setAccountName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [wageringError, setWageringError] = useState("");
   const [done, setDone] = useState("");
   const [doneState, setDoneState] = useState<"paid" | "pending" | "failed">("paid");
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const submitting = useRef(false);
+  const bank = methods.find((item) => item.id === method);
+  const numericAmount = Number(amount);
 
   useEffect(() => {
     loadWalletMethods().catch(() =>
@@ -46,13 +56,52 @@ export default function Wallet({
     setDone("");
   }
 
+  function validateAmount() {
+    if (!method) {
+      setError("KBZPay သို့မဟုတ် WavePay ကို ရွေးပါ။");
+      return false;
+    }
+    if (!Number.isSafeInteger(numericAmount) || numericAmount <= 0) {
+      setError("ငွေပမာဏကို မှန်ကန်စွာ ထည့်ပါ။");
+      return false;
+    }
+    if (numericAmount > 1_000_000) {
+      setError("တစ်ကြိမ်လျှင် အများဆုံး 1,000,000 ကျပ် ထုတ်နိုင်ပါသည်။");
+      return false;
+    }
+    if (numericAmount > balance) {
+      setError("လက်ကျန်ငွေ မလုံလောက်ပါ။");
+      return false;
+    }
+    return true;
+  }
+
+  function validateAccount() {
+    if (!accountName.trim()) {
+      setError("အကောင့်အမည် ထည့်ပါ။");
+      return false;
+    }
+    if (!/^09\d{8,10}$/.test(phone)) {
+      setError("09 ဖြင့်စသော ဖုန်းနံပါတ်ကို မှန်ကန်စွာ ထည့်ပါ။");
+      return false;
+    }
+    return true;
+  }
+
+  function goToStep(next: number) {
+    if (submitting.current) return;
+    setError("");
+    setStep(next);
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!method) return;
+    if (step !== 3 || submitting.current || !validateAmount() || !validateAccount() || !method) return;
+    submitting.current = true;
     setError("");
     setBusy(true);
     try {
-      const result = await submitWithdraw(method, Number(amount), phone, requestId);
+      const result = await submitWithdraw(method, numericAmount, phone, requestId);
       if (typeof result.balance === "number") onBalance(result.balance);
       setDone(result.message);
       setDoneState(result.state);
@@ -66,12 +115,13 @@ export default function Wallet({
         setError(err instanceof WalletRequestError ? err.message : "ငွေထုတ်ခြင်း မအောင်မြင်ပါ။ ပြန်လည်ကြိုးစားပါ။");
       }
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
 
   return (
-      <section className={`wallet-sheet${embedded ? " wallet-embedded" : ""}`}>
+    <section className={`wallet-sheet withdraw-flow${embedded ? " wallet-embedded" : ""}`}>
       {!embedded ? <div className="wallet-head">
         <h2>ငွေထုတ်</h2>
         <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label="ပိတ်မည်">
@@ -83,11 +133,11 @@ export default function Wallet({
       </div> : null}
 
       <div className="wallet-body">
-        {step !== 4 && step !== 5 ? (
+        {step === 1 ? (
           <>
             <div className="avail-card">
               <small>လက်ရှိလက်ကျန်</small>
-              <strong>{balance.toLocaleString("my-MM")} <span>ကျပ်</span></strong>
+              <strong>{balance.toLocaleString("en-US")} <span>ကျပ်</span></strong>
             </div>
             <p className="wallet-title">ငွေလက်ခံမည့်ဘဏ်</p>
             <div className="bank-grid">
@@ -100,67 +150,102 @@ export default function Wallet({
                   aria-pressed={method === item.id}
                 >
                   <img src={item.img} alt="" />
-                  {item.name}
+                  <span>{item.name}</span>
+                  {method === item.id ? <span className="withdraw-bank-check" aria-hidden="true">✓</span> : null}
                 </button>
               ))}
             </div>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!method) {
-                setError("KBZPay သို့မဟုတ် WavePay ကို ရွေးပါ");
-                return;
-              }
-              if (!amount || Number(amount) <= 0) {
-                setError("ငွေပမာဏ ထည့်ပါ");
-                return;
-              }
-              if (!phone.trim()) {
-                setError("ဖုန်းနံပါတ် ထည့်ပါ");
-                return;
-              }
-              void onSubmit(event);
-            }}
-          >
-            <label className="field">
-              ငွေပမာဏ
-              <div className="field-box">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value.replace(/\D/g, ""))}
-                  placeholder="0"
-                  required
-                />
-                <span>ကျပ်</span>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (validateAmount()) goToStep(2);
+              }}
+            >
+              <label className="field">
+                ငွေပမာဏ
+                <div className="field-box">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    id="withdraw-amount"
+                    value={amount}
+                    onChange={(event) => {
+                      setAmount(event.target.value.replace(/\D/g, "").slice(0, 8));
+                      setError("");
+                    }}
+                    placeholder="0"
+                    required
+                  />
+                  <span>ကျပ်</span>
+                </div>
+              </label>
+              <div className="quick-row">
+                {quickAmounts.map((value) => (
+                  <button key={value} type="button" onClick={() => { setAmount(value); setError(""); }}>
+                    {Number(value).toLocaleString("en-US")}
+                  </button>
+                ))}
               </div>
-            </label>
-            <div className="quick-row">
-              {quickAmounts.map((value) => (
-                <button key={value} type="button" onClick={() => setAmount(value)}>
-                  {Number(value).toLocaleString("my-MM")}
-                </button>
-              ))}
-            </div>
-            <label className="field">
-              {method ? `${method === "kbzpay" ? "KBZPay" : "WavePay"} ဖုန်းနံပါတ်` : "ဖုန်းနံပါတ်"}
-              <div className="field-box">
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  placeholder="09..."
-                  required
-                />
-              </div>
-            </label>
-            {error ? <p className="error">{error}</p> : null}
-            <button className="primary-btn" type="submit" disabled={busy}>
-              {busy ? "လုပ်ဆောင်နေသည်…" : "ငွေထုတ်မည်"}
-            </button>
-          </form>
+              {error ? <p className="error withdraw-error" role="alert">{error}</p> : null}
+              <button className="primary-btn withdraw-next" type="submit">
+                ရှေ့ဆက်မည်
+              </button>
+            </form>
           </>
+        ) : null}
+
+        {step === 2 && bank ? (
+          <>
+            <div className="withdraw-selected-bank">
+              <img src={bank.img} alt="" />
+              <strong>{bank.name}</strong>
+              <button type="button" onClick={() => goToStep(1)}>ပြောင်းမည်</button>
+            </div>
+            <h2 className="withdraw-step-title">ငွေလက်ခံမည့်အကောင့်</h2>
+            <form onSubmit={(event) => {
+              event.preventDefault();
+              if (validateAccount()) goToStep(3);
+            }}>
+              <div className="withdraw-account-panel">
+                <label className="field" htmlFor="withdraw-name">
+                  အကောင့်အမည်
+                  <div className="field-box">
+                    <input id="withdraw-name" type="text" value={accountName} onChange={(event) => { setAccountName(event.target.value); setError(""); }} placeholder="အမည်ထည့်ပါ" autoComplete="off" maxLength={80} required />
+                  </div>
+                </label>
+                <label className="field" htmlFor="withdraw-phone">
+                  ဖုန်းနံပါတ်
+                  <div className="field-box">
+                    <input id="withdraw-phone" type="tel" inputMode="tel" value={phone} onChange={(event) => { setPhone(localPhone(event.target.value)); setError(""); }} placeholder="09xxxxxxxxx" autoComplete="tel-national" minLength={10} maxLength={16} pattern="09[0-9]{8,10}" required />
+                  </div>
+                </label>
+              </div>
+              {error ? <p className="error withdraw-error" role="alert">{error}</p> : null}
+              <button className="primary-btn withdraw-next" type="submit">ရှေ့ဆက်မည်</button>
+            </form>
+          </>
+        ) : null}
+
+        {step === 3 && bank ? (
+          <form onSubmit={(event) => void onSubmit(event)}>
+            <h2 className="withdraw-step-title">ငွေထုတ်မှု အတည်ပြုရန်</h2>
+            <section className="withdraw-preview" aria-label="ငွေထုတ်မည့် အချက်အလက်များ">
+              <div className="withdraw-preview-bank">
+                <img src={bank.img} alt="" />
+                <strong>{bank.name}</strong>
+              </div>
+              <dl>
+                <div><dt>အကောင့်အမည်</dt><dd>{accountName.trim()}</dd></div>
+                <div><dt>ဖုန်းနံပါတ်</dt><dd>{phone}</dd></div>
+                <div><dt>ငွေထုတ်ပမာဏ</dt><dd>{numericAmount.toLocaleString("en-US")} ကျပ်</dd></div>
+              </dl>
+            </section>
+            {error ? <p className="error withdraw-error" role="alert">{error}</p> : null}
+            <div className="withdraw-actions">
+              <button className="withdraw-edit" type="button" onClick={() => goToStep(2)} disabled={busy}>ပြင်မည်</button>
+              <button className="primary-btn" type="submit" disabled={busy}>{busy ? "လုပ်ဆောင်နေသည်…" : "အတည်ပြုပြီး ငွေထုတ်မည်"}</button>
+            </div>
+          </form>
         ) : null}
 
         {step === 4 ? (
