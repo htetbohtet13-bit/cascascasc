@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DepositVerificationPendingError, loadWalletMethods, submitDeposit, type PayMethod, type WalletMethods } from "./lib/wallet";
+import PaymentResult from "./PaymentResult";
 
 type FlowStep = 1 | 2 | 3 | 4;
 type SubmitStatus = "idle" | "verifying" | "success" | "failed" | "pending";
@@ -74,15 +75,6 @@ function IconCheck() {
   );
 }
 
-function IconX() {
-  return (
-    <svg width="43" height="43" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-
 export default function DepositFlow({ embedded = false, onFullscreenChange, onHistory, onClose, onBalance }: Props) {
   const [step, setStep] = useState<FlowStep>(1);
   const [method, setMethod] = useState<PayMethod | null>(null);
@@ -94,7 +86,6 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
   const [timeLeft, setTimeLeft] = useState(600);
   const [status, setStatus] = useState<SubmitStatus>("idle");
   const [statusMessage, setStatusMessage] = useState("");
-  const [redirectCountdown, setRedirectCountdown] = useState(3);
   const [directing, setDirecting] = useState(false);
   const [directPhase, setDirectPhase] = useState(0);
   const [loadingMethods, setLoadingMethods] = useState(true);
@@ -146,16 +137,6 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
     const timer = window.setTimeout(() => receiptInputRef.current?.focus(), 280);
     return () => window.clearTimeout(timer);
   }, [step, directing]);
-
-  useEffect(() => {
-    if ((status !== "success" && status !== "failed") || redirectCountdown <= 0) return;
-    const timer = window.setTimeout(() => setRedirectCountdown((current) => current - 1), 1000);
-    return () => window.clearTimeout(timer);
-  }, [status, redirectCountdown]);
-
-  useEffect(() => {
-    if ((status === "success" || status === "failed") && redirectCountdown === 0) onClose();
-  }, [status, redirectCountdown, onClose]);
 
   useEffect(() => {
     return () => {
@@ -226,7 +207,6 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
     submissionStarted.current = true;
     setStep(4);
     setStatus("verifying");
-    setRedirectCountdown(3);
     try {
       const result = await submitDeposit(method, numericAmount, receiptDigits);
       onBalance(result.balance);
@@ -467,69 +447,10 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
         ) : null}
 
         {step === 4 && !directing ? (
-          <section className="deposit-panel deposit-result">
-            {status === "verifying" ? (
-              <>
-                <div className="deposit-result-icon spin">
-                  <div className="deposit-spinner" />
-                </div>
-                <h1>စစ်ဆေးနေသည်</h1>
-                <p>
-                  ငွေလွှဲမှုကို လုံခြုံစွာ
-                  <br />
-                  စစ်ဆေးနေပါသည်
-                </p>
-              </>
-            ) : null}
-            {status === "success" ? (
-              <>
-                <div className="deposit-result-icon ok">
-                  <IconCheck />
-                </div>
-                <h1>ငွေသွင်းအောင်မြင်</h1>
-                <div className="deposit-result-amount">
-                  {numericAmount.toLocaleString("en-US")} <span>Ks</span>
-                </div>
-                <p>{statusMessage}</p>
-                {numericAmount >= 5000 ? (
-                  <div className="deposit-bonus result-bonus">🎁 ဘောနပ်စ်ရှိပါက အလိုအလျောက် ထည့်ပေးပါမည်</div>
-                ) : null}
-              </>
-            ) : null}
-            {status === "pending" ? (
-              <>
-                <div className="deposit-result-icon pending"><IconClock /></div>
-                <h1>ငွေသွင်းမှုကို စစ်ဆေးရန် လိုအပ်ပါသည်</h1>
-                <p>{statusMessage}</p>
-                {onHistory ? <button type="button" className="deposit-primary" onClick={onHistory}>မှတ်တမ်းကြည့်မည်</button> : null}
-                <button type="button" className={onHistory ? "ghost-btn" : "deposit-primary"} onClick={onClose}>ဂိမ်းသို့ပြန်မည်</button>
-              </>
-            ) : null}
-            {status === "failed" ? (
-              <>
-                <div className="deposit-result-icon bad">
-                  <IconX />
-                </div>
-                <h1>စစ်ဆေးမရပါ</h1>
-                <p className="bad-msg">{statusMessage}</p>
-                <p className="tiny">ပြေစာနံပါတ်ကို ပြန်စစ်ပါ</p>
-              </>
-            ) : null}
-            {status === "success" || status === "failed" ? (
-              <>
-                <div className="deposit-progress result">
-                  <div
-                    className={status === "success" ? "ok" : "bad"}
-                    style={{ width: `${((3 - redirectCountdown) / 3) * 100}%` }}
-                  />
-                </div>
-                <p className="tiny">{redirectCountdown} စက္ကန့်အတွင်း ဂိမ်းသို့ပြန်မည်</p>
-                <button type="button" className="deposit-primary" onClick={onClose}>
-                  ဂိမ်းသို့ပြန်မည်
-                </button>
-              </>
-            ) : null}
-          </section>
+          <PaymentResult kind="deposit" state={status === "verifying" || status === "idle" ? "processing" : status}
+            amount={numericAmount} bank={bank ? { name: bank.label, image: bank.img } : undefined}
+            message={status === "verifying" ? "သင့်ငွေလွှဲမှုကို စစ်ဆေးနေပါသည်။" : status === "success" ? "သင့်လက်ကျန်ငွေထဲသို့ ထည့်သွင်းပြီးပါပြီ။" : statusMessage}
+            onClose={onClose} onHistory={onHistory} />
         ) : null}
       </div>
     </main>

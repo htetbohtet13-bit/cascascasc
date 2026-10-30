@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { loadWalletMethods, submitWithdraw, WalletRequestError, type PayMethod } from "./lib/wallet";
+import PaymentResult from "./PaymentResult";
 
 type Props = {
   embedded?: boolean;
@@ -7,6 +8,8 @@ type Props = {
   defaultPhone?: string;
   onClose: () => void;
   onBalance: (balance: number) => void;
+  onFullscreenChange?: (fullscreen: boolean) => void;
+  onHistory?: () => void;
 };
 
 const methods: { id: PayMethod; name: string; img: string; cls: string }[] = [
@@ -27,6 +30,8 @@ export default function Wallet({
   defaultPhone = "",
   onClose,
   onBalance,
+  onFullscreenChange,
+  onHistory,
 }: Props) {
   const [step, setStep] = useState(1);
   const [method, setMethod] = useState<PayMethod | null>(null);
@@ -43,6 +48,10 @@ export default function Wallet({
   const submitting = useRef(false);
   const bank = methods.find((item) => item.id === method);
   const numericAmount = Number(amount);
+
+  useLayoutEffect(() => {
+    onFullscreenChange?.(busy || step === 4);
+  }, [busy, step, onFullscreenChange]);
 
   useEffect(() => {
     loadWalletMethods().catch(() =>
@@ -126,7 +135,7 @@ export default function Wallet({
 
   return (
     <section className={`wallet-sheet withdraw-flow${embedded ? " wallet-embedded" : ""}`}>
-      {!embedded ? <div className="wallet-head">
+      {!embedded && !busy && step !== 4 ? <div className="wallet-head">
         <h2>ငွေထုတ်</h2>
         <button type="button" className="icon-btn" onClick={onClose} disabled={busy} aria-label="ပိတ်မည်">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -230,7 +239,7 @@ export default function Wallet({
           </>
         ) : null}
 
-        {step === 3 && bank ? (
+        {step === 3 && bank && !busy ? (
           <form onSubmit={(event) => void onSubmit(event)}>
             <h2 className="withdraw-step-title">ငွေထုတ်မှု အတည်ပြုရန်</h2>
             <section className="withdraw-preview" aria-label="ငွေထုတ်မည့် အချက်အလက်များ">
@@ -252,29 +261,12 @@ export default function Wallet({
           </form>
         ) : null}
 
-        {step === 4 ? (
-          <div>
-            <p className={doneState === "pending" ? "wallet-pending" : doneState === "failed" ? "error" : "success"}>
-              {done}
-            </p>
-            {doneState === "failed" ? (
-              <button
-                type="button"
-                className="primary-btn"
-                onClick={() => {
-                  setDone("");
-                  setError("");
-                  setStep(1);
-                }}
-              >
-                ပြန်လည်ကြိုးစားမည်
-              </button>
-            ) : (
-              <button type="button" className="primary-btn" onClick={onClose}>
-                ပြီးပါပြီ
-              </button>
-            )}
-          </div>
+        {busy || step === 4 ? (
+          <PaymentResult kind="withdraw" state={busy ? "processing" : doneState === "paid" ? "success" : doneState}
+            amount={numericAmount} bank={bank ? { name: bank.name, image: bank.img } : undefined} phone={phone}
+            message={busy ? "တောင်းဆိုမှုကို လုပ်ဆောင်နေပါသည်။" : doneState === "paid" ? "သင့်ဘဏ်အကောင့်သို့ ငွေလွှဲပေးပြီးပါပြီ။" : done}
+            onClose={onClose} onHistory={onHistory}
+            onRetry={!busy && doneState === "failed" ? () => { setDone(""); setError(""); setStep(1); } : undefined} />
         ) : null}
 
         {step === 5 ? (

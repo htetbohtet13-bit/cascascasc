@@ -12,6 +12,7 @@ async function compile(path) {
 }
 const componentCode = await compile("../src/Wallet.tsx");
 const walletCode = await compile("../src/lib/wallet.ts");
+const resultCode = await compile("../src/PaymentResult.tsx");
 
 function find(tree, predicate) {
   if (!tree || typeof tree !== "object") return null;
@@ -50,6 +51,7 @@ function harness(payout = () => response({ ok: true, state: "paid", balance: 940
       return states[index];
     },
     useEffect(callback) { if (!effects.length) effects.push(callback); },
+    useLayoutEffect(callback) { callback(); },
   };
   const api = {};
   runInNewContext(walletCode, { exports: api, fetch: async (url, options) => {
@@ -59,7 +61,9 @@ function harness(payout = () => response({ ok: true, state: "paid", balance: 940
     return payout(url, options);
   } });
   const exports = {};
-  const jsx = (type, properties) => ({ type, props: properties });
+  const jsx = (type, properties) => typeof type === "function" ? type(properties) : ({ type, props: properties });
+  const resultExports = {};
+  runInNewContext(resultCode, { exports: resultExports, require: () => ({ jsx, jsxs: jsx }) });
   const forbiddenStorage = new Proxy({}, { get() { throw new Error("Withdrawal fields must not use persistent storage"); } });
   runInNewContext(componentCode, {
     exports, localStorage: forbiddenStorage, sessionStorage: forbiddenStorage,
@@ -68,6 +72,7 @@ function harness(payout = () => response({ ok: true, state: "paid", balance: 940
       if (name === "react") return react;
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
       if (name === "./lib/wallet") return api;
+      if (name === "./PaymentResult") return resultExports;
       throw new Error(`Unexpected import: ${name}`);
     },
   });
@@ -174,8 +179,9 @@ test("rapid repeated confirmations create one payout and pending results never o
   confirm({ preventDefault() {} }); confirm({ preventDefault() {} });
   await flush();
   assert.equal(app.payoutCalls().length, 1);
-  assert.equal(app.button("ပြင်မည်").props.disabled, true);
-  assert.equal(app.button("လုပ်ဆောင်နေသည်…").props.disabled, true);
+  assert.equal(app.button("ပြင်မည်"), null);
+  assert.equal(app.button("အတည်ပြုပြီး ငွေထုတ်မည်"), null);
+  assert.ok(text(app.render()).includes("ငွေလွှဲနေပါသည်"));
   finish(response({ state: "pending", balance: 94000 }, 502));
   await flush();
   assert.equal(app.button("ပြန်လည်ကြိုးစားမည်"), null);
@@ -236,6 +242,9 @@ test("an explicit paid result shows Burmese success without depending on a gatew
   const app = harness(() => response({ state: "paid", ok: true, balance: 94000 }));
   await app.toPreview(); await app.submit();
   assert.ok(text(app.render()).includes("ငွေထုတ်ခြင်း အောင်မြင်ပါသည်။"));
+  assert.ok(text(app.render()).includes("5,000"));
+  assert.ok(text(app.render()).includes("KBZPay"));
+  assert.ok(text(app.render()).includes("09123456789"));
   assert.deepEqual(app.balances, [94000]);
   assert.equal(app.button("ပြန်လည်ကြိုးစားမည်"), null);
 });

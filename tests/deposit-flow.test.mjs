@@ -11,6 +11,7 @@ async function compile(path) {
 }
 const walletCode = await compile("../src/lib/wallet.ts");
 const depositCode = await compile("../src/DepositFlow.tsx");
+const resultCode = await compile("../src/PaymentResult.tsx");
 const flush = () => new Promise(setImmediate);
 
 function walletLibrary(fetch) {
@@ -110,7 +111,9 @@ function componentHarness(depositReply) {
     return depositReply();
   });
   const exports = {};
-  const jsx = (type, props) => ({ type, props });
+  const jsx = (type, props) => typeof type === "function" ? type(props) : ({ type, props });
+  const resultExports = {};
+  runInNewContext(resultCode, { exports: resultExports, require: () => ({ jsx, jsxs: jsx }) });
   const addTimer = (callback, delay, repeat = false) => { const id = ++timerId; timers.set(id, { callback, delay, repeat }); return id; };
   runInNewContext(depositCode, {
     exports, Error,
@@ -120,6 +123,7 @@ function componentHarness(depositReply) {
       if (name === "react") return react;
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
       if (name === "./lib/wallet") return api;
+      if (name === "./PaymentResult") return resultExports;
       throw new Error(`Unexpected import: ${name}`);
     },
   });
@@ -160,7 +164,7 @@ test("an interrupted deposit stays on an unconfirmed screen with history access,
   await app.toReceipt();
   app.button("အတည်ပြုမည်").props.onClick();
   await app.settle();
-  assert.ok(text(app.render()).includes("ငွေသွင်းမှုကို စစ်ဆေးရန် လိုအပ်ပါသည်"));
+  assert.ok(text(app.render()).includes("စစ်ဆေးနေဆဲ ဖြစ်ပါသည်"));
   assert.ok(!text(app.render()).includes("စစ်ဆေးမရပါ"));
   assert.deepEqual(app.balances, []);
   assert.equal(app.closes(), 0);
@@ -182,4 +186,10 @@ test("rapid deposit confirmations invoke verification only once", async () => {
   await app.settle();
   assert.deepEqual(app.balances, [1000]);
   assert.ok(text(app.render()).includes("ငွေသွင်းအောင်မြင်"));
+  assert.ok(text(app.render()).includes("1,000"));
+  assert.ok(text(app.render()).includes("KBZPay"));
+  assert.equal(app.closes(), 0);
+  assert.ok(![...app.timers.values()].some((timer) => !timer.repeat && timer.delay === 1000));
+  app.button("ပြီးပါပြီ").props.onClick();
+  assert.equal(app.closes(), 1);
 });

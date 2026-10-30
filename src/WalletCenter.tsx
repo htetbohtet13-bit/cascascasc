@@ -79,10 +79,11 @@ function WalletHistory() {
 export default function WalletCenter({ initialTab, balance, defaultPhone, onClose, onBalance }: Props) {
   const [activeTab, setActiveTab] = useState<WalletTab>(initialTab);
   const [depositFullscreen, setDepositFullscreen] = useState(false);
-  const fullscreen = activeTab === "deposit" && depositFullscreen;
+  const [withdrawFullscreen, setWithdrawFullscreen] = useState(false);
+  const fullscreen = activeTab === "deposit" ? depositFullscreen : activeTab === "withdraw" && withdrawFullscreen;
 
   return (
-    <section className={`wallet-center${fullscreen ? " deposit-fullscreen" : ""}`} aria-label={fullscreen ? "ငွေသွင်း" : "ငွေကြေးစီမံရန်"}>
+    <section className={`wallet-center${fullscreen ? " deposit-fullscreen" : ""}`} aria-label={fullscreen ? activeTab === "deposit" ? "ငွေသွင်း" : "ငွေထုတ်" : "ငွေကြေးစီမံရန်"}>
       {!fullscreen ? (
         <>
           <header className="wallet-center-header">
@@ -114,7 +115,7 @@ export default function WalletCenter({ initialTab, balance, defaultPhone, onClos
       <div className="wallet-center-content">
         {activeTab === "deposit" ? <DepositFlow embedded onFullscreenChange={setDepositFullscreen} onHistory={() => setActiveTab("history")} onClose={onClose} onBalance={onBalance} /> : null}
         {activeTab === "withdraw" ? (
-          <Wallet embedded balance={balance} defaultPhone={defaultPhone} onClose={onClose} onBalance={onBalance} />
+          <Wallet embedded balance={balance} defaultPhone={defaultPhone} onClose={onClose} onBalance={onBalance} onFullscreenChange={setWithdrawFullscreen} onHistory={() => setActiveTab("history")} />
         ) : null}
         {activeTab === "history" ? (
           <div className="wallet-history-view">
