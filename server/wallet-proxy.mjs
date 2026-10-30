@@ -18,6 +18,12 @@ const providerOf = (value) => {
   return provider === "wavepay" ? "wave" : provider;
 };
 const textId = (value) => typeof value === "string" && value.trim().length <= 160 ? value.trim() : "";
+const depositCurrencyOf = (value) => {
+  if (typeof value !== "string" || value.length > 32) return "";
+  // Ignore display-only direction/zero-width marks, never currency letters,
+  // punctuation or internal whitespace. Unknown and missing currencies fail.
+  return value.replace(/[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, "").trim().toUpperCase();
+};
 
 function transferMatches(data, { serviceType, amount, phone }) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return false;
@@ -155,13 +161,16 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       if (typeof verified.data.mode !== "string" || verified.data.mode.trim().toLowerCase() !== "direct") invalidFields.push("mode");
       if (providerOf(verified.data.provider) !== providerOf(serviceType)) invalidFields.push("provider");
       if (typeof verified.data.account !== "string" || phoneOf(verified.data.account) !== phoneOf(receiver)) invalidFields.push("account");
-      if (typeof verified.data.currency !== "string" || verified.data.currency.trim().toUpperCase() !== "MMK") invalidFields.push("currency");
+      if (depositCurrencyOf(verified.data.currency) !== "MMK") invalidFields.push("currency");
       if (invalidFields.length) {
         log("verification_fields_rejected", { invalid_fields: invalidFields, field_types: {
           transaction_id: typeof verified.data.transaction_id, amount: typeof paid,
           mode: typeof verified.data.mode, provider: typeof verified.data.provider,
           account: typeof verified.data.account, currency: typeof verified.data.currency,
-        } });
+        }, ...(invalidFields.includes("currency") && typeof verified.data.currency === "string" ? {
+          currency_code_points: Array.from(verified.data.currency).slice(0, 16).map((character) => `U+${character.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")}`),
+          currency_truncated: Array.from(verified.data.currency).length > 16,
+        } : {}) });
         return failure(502, "PAYMENT_VERIFICATION_INCOMPLETE", "The payment service returned an incomplete verification result");
       }
       if (paid !== amount) {

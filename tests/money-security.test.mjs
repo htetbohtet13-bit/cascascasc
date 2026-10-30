@@ -266,6 +266,40 @@ test("verified deposit tolerates equivalent provider label casing while recordin
   for (const privateValue of ["test-key", "09123456789", "01000000000000456789", "private-test-sender", user.userId]) assert.ok(!logged.includes(privateValue));
 });
 
+test("MMK deposits tolerate invisible display marks and never credit the same receipt twice", async (t) => {
+  paymentEnv(t);
+  let result;
+  t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify(result)));
+  for (const currency of ["MMK", " mmk ", "\u200BMMK\u200B", "\u200EMMK\u200F", "\u2066MMK\u2069", "\uFEFFMMK", "M\u200BMK"]) {
+    const user = await player();
+    result = verified({ currency, transaction_id: `${randomUUID()}456789` });
+    assert.equal((await proxyDeposit()).status, 200);
+    assert.equal(await balance(user), "100");
+    assert.equal((await proxyDeposit()).status, 400);
+    assert.equal(await balance(user), "100");
+  }
+});
+
+test("unknown, missing and malformed deposit currencies stay rejected with bounded currency diagnostics", async (t) => {
+  paymentEnv(t); const user = await player();
+  let result;
+  const logs = [];
+  t.mock.method(console, "info", (...args) => logs.push(args));
+  t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify(result)));
+  for (const currency of [undefined, null, "", "USD", "\u200BUSD\u200B", "MMKUSD", "M MK", "MMK\u0000", "ＭＭＫ", "MMK" + "\u200B".repeat(33)]) {
+    result = verified({ currency });
+    assert.equal((await proxyDeposit()).status, 502);
+    assert.equal(await balance(user), "0");
+  }
+  const rejected = logs.filter((entry) => entry[1].event === "verification_fields_rejected");
+  assert.ok(rejected.every((entry) => entry[1].invalid_fields.includes("currency")));
+  assert.ok(rejected.every((entry) => !entry[1].currency_code_points || entry[1].currency_code_points.length <= 16));
+  assert.ok(rejected.some((entry) => JSON.stringify(entry[1].currency_code_points) === JSON.stringify(["U+0055", "U+0053", "U+0044"])));
+  assert.equal(rejected.at(-1)[1].currency_truncated, true);
+  assert.ok(!JSON.stringify(logs).includes("test-key"));
+  assert.ok(!JSON.stringify(logs).includes("0100123456789"));
+});
+
 test("a bank check slower than the old deadline retains a response budget and time to commit the deposit", async (t) => {
   paymentEnv(t); const user = await player();
   let budget;
