@@ -118,6 +118,15 @@ function withdrawErrorMessage(message?: string) {
   return "ငွေထုတ်ခြင်း မအောင်မြင်ပါ။ ခဏစောင့်ပြီး ပြန်လည်ကြိုးစားပါ။";
 }
 
+function pendingWithdrawal(balance?: unknown, orderId?: unknown): WithdrawResult {
+  return {
+    ok: true, state: "pending",
+    balance: typeof balance === "number" && Number.isSafeInteger(balance) && balance >= 0 ? balance : undefined,
+    orderId: typeof orderId === "string" && orderId.length <= 80 ? orderId : undefined,
+    message: "ငွေထုတ်မှုရလဒ်ကို အတည်မပြုနိုင်သေးပါ။ ထပ်မံငွေမထုတ်ဘဲ မှတ်တမ်းကို စစ်ဆေးပါ။ ကြာမြင့်နေပါက အကူအညီဌာနသို့ ဆက်သွယ်ပါ။",
+  };
+}
+
 export async function submitWithdraw(
   serviceType: PayMethod,
   amount: number,
@@ -133,14 +142,13 @@ export async function submitWithdraw(
       body: JSON.stringify({ service_type: serviceType, amount, phone, request_id: requestId }),
     });
   } catch {
-    return {
-      ok: true,
-      state: "pending",
-      message: "ငွေထုတ်မှုရလဒ်ကို အတည်မပြုနိုင်သေးပါ။ ထပ်မံငွေမထုတ်ဘဲ အကူအညီဌာနသို့ ဆက်သွယ်စစ်ဆေးပါ။",
-    };
+    return pendingWithdrawal();
   }
 
-  const payload = (await response.json().catch(() => ({}))) as {
+  let decoded: unknown;
+  try { decoded = await response.json(); } catch { return pendingWithdrawal(); }
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) return pendingWithdrawal();
+  const payload = decoded as {
     ok?: boolean;
     state?: WithdrawResult["state"];
     balance?: number;
@@ -148,23 +156,23 @@ export async function submitWithdraw(
     error?: string;
     code?: string;
     orderId?: string;
+    safeToRetry?: boolean;
   };
-  if (payload.state === "pending") {
-    return {
-      ok: true,
-      state: "pending",
-      balance: payload.balance,
-      message: "ငွေထုတ်တောင်းဆိုမှုကို စစ်ဆေးနေပါသည်။ ထပ်မံငွေမထုတ်ဘဲ ခဏစောင့်ပါ။ ကြာမြင့်နေပါက အကူအညီဌာနသို့ ဆက်သွယ်ပါ။",
-      orderId: payload.orderId,
-    };
+  if (payload.state === "pending") return pendingWithdrawal(payload.balance, payload.orderId);
+  // A broken response can arrive after the bank sent the money. Do not label
+  // it failed, claim a refund, or offer a second transfer.
+  if (response.status >= 500) return pendingWithdrawal();
+  if (!response.ok || payload.error) {
+    if (typeof payload.error !== "string" || !payload.error) return pendingWithdrawal();
+    throw new WalletRequestError(withdrawErrorMessage(payload.error), typeof payload.code === "string" ? payload.code : undefined);
   }
-  if (!response.ok || payload.error) throw new WalletRequestError(withdrawErrorMessage(payload.error), payload.code);
-  if (!payload.state || typeof payload.balance !== "number" || !payload.message) {
-    throw new WalletRequestError(withdrawErrorMessage(payload.message));
-  }
+  const safeBalance = typeof payload.balance === "number" && Number.isSafeInteger(payload.balance) && payload.balance >= 0;
+  const paid = payload.state === "paid" && payload.ok === true;
+  const failed = payload.state === "failed" && payload.ok === false && payload.safeToRetry === true;
+  if (!safeBalance || (!paid && !failed)) return pendingWithdrawal();
   return {
-    ok: Boolean(payload.ok),
-    state: payload.state,
+    ok: paid,
+    state: paid ? "paid" : "failed",
     balance: payload.balance,
     message: payload.state === "paid"
       ? "ငွေထုတ်ခြင်း အောင်မြင်ပါသည်။"

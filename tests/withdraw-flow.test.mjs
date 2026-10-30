@@ -187,7 +187,7 @@ test("rapid repeated confirmations create one payout and pending results never o
 
 test("a confirmed unsent failure permits an explicit retry with a new request ID", async () => {
   let count = 0;
-  const app = harness(() => response({ ok: ++count > 1, state: count === 1 ? "failed" : "paid", balance: count === 1 ? 99000 : 94000, message: "Result" }));
+  const app = harness(() => response({ ok: ++count > 1, state: count === 1 ? "failed" : "paid", safeToRetry: count === 1, balance: count === 1 ? 99000 : 94000, message: "Result" }));
   await app.toPreview(); await app.submit();
   app.button("ပြန်လည်ကြိုးစားမည်").props.onClick();
   await app.submit(); await app.submit(); await app.submit();
@@ -196,14 +196,48 @@ test("a confirmed unsent failure permits an explicit retry with a new request ID
   assert.notEqual(bodies[0].request_id, bodies[1].request_id);
 });
 
-test("an unrecognized result keeps the same idempotency reference when the user explicitly retries", async () => {
+test("an unrecognized result stays pending and cannot offer a second payout", async () => {
   const app = harness(() => response({}));
   await app.toPreview(); await app.submit();
-  assert.ok(app.button("အတည်ပြုပြီး ငွေထုတ်မည်"));
-  await app.submit();
-  const bodies = app.payoutCalls().map((call) => JSON.parse(call.options.body));
-  assert.equal(bodies.length, 2);
-  assert.equal(bodies[0].request_id, bodies[1].request_id);
+  assert.equal(app.button("အတည်ပြုပြီး ငွေထုတ်မည်"), null);
+  assert.equal(app.button("ပြန်လည်ကြိုးစားမည်"), null);
+  assert.ok(app.button("ပြီးပါပြီ"));
+  assert.equal(app.payoutCalls().length, 1);
+  assert.deepEqual(app.balances, []);
+});
+
+test("HTML, server errors and contradictory payout results never claim failure or refund", async () => {
+  for (const payout of [
+    () => ({ ok: false, status: 502, json: async () => { throw new Error("Cloudflare HTML"); } }),
+    () => response({ error: "Wallet request failed" }, 500),
+    () => response(null),
+    () => response([]),
+    () => response({ state: "unexpected", ok: true, balance: 94000, message: "unrecognized" }),
+    () => response({ state: "paid", ok: false, balance: 94000, message: "contradiction" }),
+    () => response({ state: "paid", ok: true, balance: "94000", message: "bad balance" }),
+    () => response({ state: "paid", ok: true, balance: 94000 }, 500),
+    () => response({ state: "failed", ok: false, balance: 99000, message: "not confirmed unsent" }),
+    () => response({ state: "failed", ok: false, safeToRetry: true, balance: 99000 }, 500),
+    () => response({ state: "pending", balance: -1 }, 502),
+  ]) {
+    const app = harness(payout); await app.toPreview(); await app.submit();
+    const view = text(app.render());
+    assert.ok(view.includes("အတည်မပြုနိုင်သေးပါ"));
+    assert.ok(!view.includes("မအောင်မြင်ပါ"));
+    assert.ok(!view.includes("ပြန်လည်ဖြည့်ပေးထားပါသည်"));
+    assert.equal(app.button("ပြန်လည်ကြိုးစားမည်"), null);
+    assert.equal(app.button("အတည်ပြုပြီး ငွေထုတ်မည်"), null);
+    assert.equal(app.payoutCalls().length, 1);
+    assert.deepEqual(app.balances, []);
+  }
+});
+
+test("an explicit paid result shows Burmese success without depending on a gateway message", async () => {
+  const app = harness(() => response({ state: "paid", ok: true, balance: 94000 }));
+  await app.toPreview(); await app.submit();
+  assert.ok(text(app.render()).includes("ငွေထုတ်ခြင်း အောင်မြင်ပါသည်။"));
+  assert.deepEqual(app.balances, [94000]);
+  assert.equal(app.button("ပြန်လည်ကြိုးစားမည်"), null);
 });
 
 test("network uncertainty remains pending and wagering rejections keep their Burmese error screen", async () => {

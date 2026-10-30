@@ -18,7 +18,7 @@ const providerOf = (value) => {
   return provider === "wavepay" ? "wave" : provider;
 };
 const textId = (value) => typeof value === "string" && value.trim().length <= 160 ? value.trim() : "";
-const depositCurrencyOf = (value) => {
+const kyatCurrencyOf = (value) => {
   if (typeof value !== "string" || value.length > 32) return "";
   // Ignore display-only direction/zero-width marks, never currency letters,
   // punctuation or internal whitespace. Unknown and missing currencies fail.
@@ -27,15 +27,17 @@ const depositCurrencyOf = (value) => {
   return currency === "KS" ? "MMK" : currency;
 };
 
-function transferMatches(data, { serviceType, amount, phone }) {
-  if (!data || typeof data !== "object" || Array.isArray(data)) return false;
+function transferMismatches(data, { serviceType, amount, phone }) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return ["data"];
   // The gateway's response example includes these fields, but does not declare
   // them mandatory. Any supplied evidence must match the reserved transfer.
-  return (data.amount === undefined || (typeof data.amount === "number" && data.amount === amount)) &&
-    (data.recipient === undefined || (typeof data.recipient === "string" && phoneOf(data.recipient) === phone)) &&
-    (data.provider === undefined || providerOf(data.provider) === providerOf(serviceType)) &&
-    (data.currency === undefined || data.currency === "MMK") &&
-    (data.status === undefined || data.status === "success");
+  const mismatches = [];
+  if (data.amount !== undefined && (typeof data.amount !== "number" || data.amount !== amount)) mismatches.push("amount");
+  if (data.recipient !== undefined && (typeof data.recipient !== "string" || phoneOf(data.recipient) !== phone)) mismatches.push("recipient");
+  if (data.provider !== undefined && providerOf(data.provider) !== providerOf(serviceType)) mismatches.push("provider");
+  if (data.currency !== undefined && kyatCurrencyOf(data.currency) !== "MMK") mismatches.push("currency");
+  if (data.status !== undefined && (typeof data.status !== "string" || data.status.trim().toLowerCase() !== "success")) mismatches.push("status");
+  return mismatches;
 }
 
 function hasTransferEvidence(sent) {
@@ -163,7 +165,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       if (typeof verified.data.mode !== "string" || verified.data.mode.trim().toLowerCase() !== "direct") invalidFields.push("mode");
       if (providerOf(verified.data.provider) !== providerOf(serviceType)) invalidFields.push("provider");
       if (typeof verified.data.account !== "string" || phoneOf(verified.data.account) !== phoneOf(receiver)) invalidFields.push("account");
-      if (depositCurrencyOf(verified.data.currency) !== "MMK") invalidFields.push("currency");
+      if (kyatCurrencyOf(verified.data.currency) !== "MMK") invalidFields.push("currency");
       if (invalidFields.length) {
         log("verification_fields_rejected", { invalid_fields: invalidFields, field_types: {
           transaction_id: typeof verified.data.transaction_id, amount: typeof paid,
@@ -204,6 +206,9 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
     }
 
     if (functionName === "wallet-withdraw") {
+      const trace = traceId ?? randomUUID();
+      const startedAt = Date.now();
+      const log = (event, details = {}) => console.info("Withdrawal processing", { trace_id: trace, event, duration_ms: Date.now() - startedAt, ...details });
       const phone = phoneOf(payload.phone);
       if (!/^09\d{8,10}$/.test(phone)) return { status: 400, body: { error: "Enter a valid KBZPay or WavePay number beginning with 09" } };
       const sender = phoneOf(serviceType === "kbzpay" ? config.kbzReceiver : config.waveReceiver);
@@ -214,6 +219,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       if (!config.apiKey || !sender) return { status: 500, body: { error: "Payment is not configured" } };
       const withdrawOrderId = `WD${requestId.replaceAll("-", "")}`;
       const reserved = await reserveWithdraw({ userId, orderId: withdrawOrderId, serviceType, amount, phone });
+      log("withdrawal_reservation", { ok: reserved.ok === true, state: ["reserved", "paid", "pending", "failed"].includes(reserved.state) ? reserved.state : "rejected" });
       if (!reserved.ok) return {
         status: reserved.status ?? (reserved.code === "WAGERING_REQUIRED" ? 403 : 400),
         body: { error: reserved.message, code: reserved.code, remaining_wagering: reserved.remainingWagering },
@@ -223,6 +229,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
 
       let response;
       try {
+        log("transfer_started");
         response = await fetch(paymentUrl, {
           method: "POST",
           redirect: "error",
@@ -241,6 +248,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
           }),
         });
       } catch (error) {
+        log("transfer_connection_unconfirmed", { timed_out: error?.name === "TimeoutError" || error?.name === "AbortError" });
         return {
           status: error?.name === "TimeoutError" || error?.name === "AbortError" ? 504 : 502,
           body: {
@@ -254,8 +262,10 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       }
 
       const sent = await response.json().catch(() => null);
-      const message = String(sent?.message ?? "").toLowerCase();
-      const code = String(sent?.code ?? "").toLowerCase();
+      const message = String(sent?.message ?? "").trim().toLowerCase();
+      const code = String(sent?.code ?? "").trim().toLowerCase();
+      log("transfer_response", { upstream_status: response.status, success: sent?.success === true,
+        response_tag: ["transfer_success", "otp_required"].includes(message) ? message : "unrecognized" });
       const definiteFailure = !hasTransferEvidence(sent) && (
         (response.status === 400 && ["bad_phone", "bad_amount", "no_pin", "pin_failed"].includes(code)) ||
         (response.status === 409 && code === "account_not_connected")
@@ -274,7 +284,11 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
 
       if (response.status === 200 && sent?.success === true && message === "transfer_success") {
         const providerTransactionId = textId(sent?.data?.transaction_id);
-        if (!providerTransactionId || (code && code !== "transfer_success") || !transferMatches(sent?.data, { serviceType, amount, phone })) {
+        const invalidFields = transferMismatches(sent?.data, { serviceType, amount, phone });
+        if (!providerTransactionId) invalidFields.push("transaction_id");
+        if (code && code !== "transfer_success") invalidFields.push("code");
+        if (invalidFields.length) {
+          log("transfer_fields_rejected", { invalid_fields: invalidFields });
           // Preserve evidence even if other fields contradict the reservation;
           // support must reconcile this transfer before it can ever be refunded.
           if (providerTransactionId) {
@@ -291,6 +305,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
         try {
           const recorded = await recordWithdrawTransfer({ userId, orderId: withdrawOrderId, providerTransactionId });
           if (!recorded) {
+            log("transfer_record_unconfirmed");
             return {
               status: 502,
               body: {
@@ -300,6 +315,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
             };
           }
         } catch {
+          log("transfer_record_unconfirmed");
           return {
             status: 502,
             body: {
@@ -312,6 +328,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
         try {
           result = await completeWithdraw({ userId, orderId: withdrawOrderId, providerTransactionId });
         } catch {
+          log("withdrawal_completion_unconfirmed");
           return {
             status: 502,
             body: {
@@ -321,6 +338,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
           };
         }
         if (!result.ok) {
+          log("withdrawal_completion_unconfirmed");
           return {
             status: 502,
             body: {
@@ -329,6 +347,7 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
             },
           };
         }
+        log("withdrawal_completed");
         return { status: 200, body: result };
       }
 

@@ -442,17 +442,21 @@ test("transfer success accepts matching evidence, preserves ambiguous or contrad
   const payment = t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify(reply), { status }));
   for (const entry of [
     { data: { transaction_id: randomUUID(), amount: 100, recipient: "959123456789", provider: "kbzpay", currency: "MMK", status: "success" }, state: "paid" },
+    { data: { transaction_id: randomUUID(), amount: 100, recipient: "959123456789", provider: "KBZPay", currency: "Ks", status: "Success" }, state: "paid" },
+    { data: { transaction_id: randomUUID(), amount: 100, recipient: "09123456789", provider: "kbzpay", currency: " ks ", status: " Success " }, message: " Transfer_Success ", code: " TRANSFER_SUCCESS ", state: "paid" },
     { data: { transaction_id: randomUUID() }, state: "paid" },
     { data: { transaction_id: randomUUID(), amount: 200 }, state: "pending" },
     { data: { transaction_id: randomUUID(), recipient: "09999999999" }, state: "pending" },
     { data: { transaction_id: randomUUID(), provider: "wave" }, state: "pending" },
     { data: { transaction_id: randomUUID(), currency: "USD" }, state: "pending" },
+    { data: { transaction_id: randomUUID(), currency: "KsUSD" }, state: "pending" },
+    { data: { transaction_id: randomUUID(), amount: "100", currency: "Ks" }, state: "pending" },
     { data: { transaction_id: randomUUID(), status: "pending" }, state: "pending" },
     { data: { transaction_id: randomUUID() }, code: "bad_phone", state: "pending" },
     { data: { transaction_id: randomUUID() }, status: 502, state: "pending" },
     { data: {}, state: "pending" },
   ]) {
-    const user = await player(1000); status = entry.status ?? 200; reply = { success: true, message: "transfer_success", code: entry.code, data: entry.data };
+    const user = await player(1000); status = entry.status ?? 200; reply = { success: true, message: entry.message ?? "transfer_success", code: entry.code, data: entry.data };
     const payload = withdrawPayload(); const result = await proxyWithdraw(payload);
     assert.equal(result.body.state, entry.state, JSON.stringify(entry)); assert.equal(await balance(user), "900");
     if (entry.state === "pending" && status === 200 && entry.data.transaction_id) {
@@ -463,7 +467,29 @@ test("transfer success accepts matching evidence, preserves ambiguous or contrad
     assert.equal(repeated.body.state, entry.state);
     assert.equal(payment.mock.callCount(), before);
     if (entry.state === "pending") { await proxyWithdraw(withdrawPayload()); assert.equal(payment.mock.callCount(), before); }
+    if (entry.state === "paid") {
+      assert.equal((await releaseWithdraw({ userId: user.userId, orderId: `WD${payload.request_id.replaceAll("-", "")}`, message: "must not refund a completed transfer" })).state, "paid");
+      assert.equal(await balance(user), "900");
+    }
   }
+});
+
+test("a confirmed Ks payout records a safe trace and a paid replay never sends or deducts again", async (t) => {
+  paymentEnv(t); const user = await player(1000);
+  const logs = [];
+  t.mock.method(console, "info", (...args) => logs.push(args));
+  const payment = t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ success: true, message: "transfer_success",
+    data: { transaction_id: "private-test-transfer-id", amount: 100, recipient: "09123456789", provider: "kbzpay", currency: "Ks", status: "success" } })));
+  const payload = withdrawPayload(); const res = response();
+  await withdrawHandler({ ...req(), body: payload }, res);
+  assert.equal(res.statusCode, 200); assert.equal(res.body.state, "paid"); assert.equal(res.body.balance, 900);
+  assert.match(res.headers["x-withdrawal-trace-id"], /^[0-9a-f-]{36}$/);
+  const trace = res.headers["x-withdrawal-trace-id"];
+  assert.ok(logs.every((entry) => entry[1].trace_id === trace));
+  assert.ok(logs.some((entry) => entry[1].event === "withdrawal_completed"));
+  for (const privateValue of ["test-key", "09123456789", "private-test-transfer-id", user.userId, payload.request_id]) assert.ok(!JSON.stringify(logs).includes(privateValue));
+  assert.equal((await proxyWithdraw(payload)).body.state, "paid");
+  assert.equal(payment.mock.callCount(), 1); assert.equal(await balance(user), "900");
 });
 
 test("only a complete unsent OTP challenge releases funds; network uncertainty stays held", async (t) => {

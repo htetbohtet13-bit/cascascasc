@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { handleWalletProxy } from "../../server/wallet-proxy.mjs";
 import { unsafeRequestError } from "../../server/request-security.mjs";
 import { readJsonBody, sendBodyError } from "../../server/request-body.mjs";
@@ -20,13 +21,18 @@ export default async function handler(req, res) {
   }
   const denied = unsafeRequestError(req);
   if (denied) return res.status(denied.status).json(denied.body);
+  const traceId = randomUUID();
+  const startedAt = Date.now();
+  res.setHeader("X-Withdrawal-Trace-Id", traceId);
   try {
     const result = await handleWalletProxy({
       req,
       functionName: "wallet-withdraw",
+      traceId,
       payload: await readJsonBody(req),
     });
     for (const [name, value] of Object.entries(result.headers ?? {})) res.setHeader(name, value);
+    console.info("Withdrawal request completed", { trace_id: traceId, status: result.status, duration_ms: Date.now() - startedAt });
     return res.status(result.status).json(result.body);
   } catch (error) {
     if (sendBodyError(res, error)) return;

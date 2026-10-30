@@ -111,8 +111,12 @@ export default function Wallet({
       if (err instanceof WalletRequestError && err.code === "WAGERING_REQUIRED") {
         setWageringError(err.message);
         setStep(5);
+      } else if (err instanceof WalletRequestError) {
+        setError(err.message);
       } else {
-        setError(err instanceof WalletRequestError ? err.message : "ငွေထုတ်ခြင်း မအောင်မြင်ပါ။ ပြန်လည်ကြိုးစားပါ။");
+        setDoneState("pending");
+        setDone("ငွေထုတ်မှုရလဒ်ကို အတည်မပြုနိုင်သေးပါ။ ထပ်မံငွေမထုတ်ဘဲ မှတ်တမ်းကို စစ်ဆေးပါ။");
+        setStep(4);
       }
     } finally {
       submitting.current = false;
