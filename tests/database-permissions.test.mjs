@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { after, before, test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { adminGameHistory, playerGameHistory } from "../server/game-history.mjs";
+import { depositBonusEligibility } from "../server/deposit-bonus.mjs";
 
 const db = new PGlite();
 async function migration(name) {
@@ -13,7 +14,7 @@ async function migration(name) {
 before(async () => {
   for (const name of ["001_app_schema.sql", "002_phone_auth.sql", "005_skm_seamless_wallet.sql",
     "006_game_display_settings.sql", "007_game_hot_setting.sql", "008_deposit_wagering.sql",
-    "009_auth_security.sql", "010_money_constraints.sql", "011_runtime_role.sql", "012_game_minor_units.sql"]) await migration(name);
+    "009_auth_security.sql", "010_money_constraints.sql", "011_runtime_role.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql"]) await migration(name);
 });
 after(async () => { await db.close(); });
 
@@ -46,6 +47,8 @@ test("runtime can perform required app writes, but cannot drop/create tables or 
   try {
     const profile = await db.query("insert into public.profiles(phone) values ('+959123456789') returning id");
     const userId = profile.rows[0].id;
+    assert.equal((await depositBonusEligibility(db, userId)).eligible, true);
+    await assert.rejects(() => db.query("update public.deposit_bonus_campaign set starts_at=now()"), (error) => error.code === "42501");
     await db.query("insert into public.auth_credentials(user_id,password_hash) values($1::uuid,'test-hash')", [userId]);
     await db.query("insert into public.auth_rate_limits(scope,key_hash,attempts,expires_at) values('test',$1,1,now()+interval '1 minute')", ["a".repeat(64)]);
     await db.query("insert into public.wallet_wagering_events(user_id,kind,amount,source_id,state) values($1::uuid,'DEPOSIT',1000,'role-test','SETTLED')", [userId]);
@@ -61,7 +64,7 @@ test("runtime can perform required app writes, but cannot drop/create tables or 
 test("an unrelated role cannot read player credentials or balances through PUBLIC grants", async () => {
   await db.exec("create role security_unrelated_test nologin; set role security_unrelated_test");
   try {
-    for (const table of ["profiles", "auth_credentials", "auth_sessions", "auth_admin_sessions", "auth_rate_limits", "wallet_wagering_events"]) {
+    for (const table of ["profiles", "auth_credentials", "auth_sessions", "auth_admin_sessions", "auth_rate_limits", "wallet_wagering_events", "deposit_bonus_campaign"]) {
       await assert.rejects(() => db.query(`select * from public.${table}`), (error) => error.code === "42501");
     }
   } finally { await db.exec("reset role"); }

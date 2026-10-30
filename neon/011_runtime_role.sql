@@ -54,6 +54,12 @@ grant select, insert, update on public.profiles, public.auth_credentials,
 grant select, insert, delete on public.auth_sessions, public.auth_admin_sessions to j777_runtime;
 grant select, insert, update, delete on public.auth_rate_limits to j777_runtime;
 grant select on public.slot_bets to j777_runtime;
+-- Keep later promotion storage readable when this hardening script is rerun.
+do $$ begin
+  if to_regclass('public.deposit_bonus_campaign') is not null then
+    grant select, insert on public.deposit_bonus_campaign to j777_runtime;
+  end if;
+end $$;
 grant usage on sequence public.wallet_wagering_events_id_seq to j777_runtime;
 
 revoke all on public.profiles, public.auth_credentials, public.auth_sessions,

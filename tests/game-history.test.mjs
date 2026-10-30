@@ -28,7 +28,7 @@ const { handleAdminApi } = await import("../server/admin-api.mjs");
 const envKeys = ["admin_secret", "ADMIN_TOTP_SECRET", "ADMIN_MFA_REQUIRED"];
 const savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
 before(async () => {
-  for (const name of ["001_app_schema.sql", "002_phone_auth.sql", "005_skm_seamless_wallet.sql", "006_game_display_settings.sql", "008_deposit_wagering.sql", "009_auth_security.sql", "010_money_constraints.sql", "012_game_minor_units.sql"]) {
+  for (const name of ["001_app_schema.sql", "002_phone_auth.sql", "005_skm_seamless_wallet.sql", "006_game_display_settings.sql", "008_deposit_wagering.sql", "009_auth_security.sql", "010_money_constraints.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql"]) {
     await db.exec((await readFile(new URL(`../neon/${name}`, import.meta.url), "utf8")).replace("create extension if not exists pgcrypto;", ""));
   }
   process.env.admin_secret = "test-history-admin-secret";

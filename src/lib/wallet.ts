@@ -3,12 +3,14 @@ export type PayMethod = "kbzpay" | "wavepay";
 export type WalletMethods = {
   kbzpay: { label: string; receiver: string; name?: string };
   wavepay: { label: string; receiver: string; name?: string };
+  promotion: { eligible: boolean; bonus: number; minimum: number; multiplier: number };
 };
 
 export type WalletHistoryItem = {
   kind: "deposit" | "withdraw";
   service_type: PayMethod;
   amount: number | string;
+  bonus_amount?: number | string;
   status: "pending" | "verified" | "failed" | "paid";
   message: string | null;
   created_at: string;
@@ -68,7 +70,7 @@ export async function submitDeposit(serviceType: PayMethod, amount: number, tran
   try {
     response = await fetch("/api/wallet/deposit", {
       method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ service_type: serviceType, amount, transaction_id: transactionId }),
+      body: JSON.stringify({ service_type: serviceType, amount, transaction_id: transactionId, bonus_terms_version: 1 }),
     });
   } catch {
     throw new DepositVerificationPendingError();
@@ -78,12 +80,20 @@ export async function submitDeposit(serviceType: PayMethod, amount: number, tran
   if (!decoded || typeof decoded !== "object" || Array.isArray(decoded) || response.status >= 500) {
     throw new DepositVerificationPendingError();
   }
-  const result = decoded as { ok?: boolean; balance?: number; error?: string };
+  const result = decoded as { ok?: boolean; balance?: number; error?: string; bonusAmount?: number; depositAmount?: number; creditedAmount?: number };
   if (!response.ok || result.error) throw new Error(paymentErrorMessage(result.error));
   if (result.ok !== true || typeof result.balance !== "number" || !Number.isSafeInteger(result.balance) || result.balance < 0) {
     throw new DepositVerificationPendingError();
   }
-  return { ok: true, balance: result.balance, message: "ငွေဖြည့်သွင်းပြီးပါပြီ။" };
+  const bonus = result.bonusAmount ?? 0;
+  if ((bonus !== 0 && bonus !== 5000) ||
+      (bonus > 0 && (result.depositAmount === undefined || result.creditedAmount === undefined)) ||
+      (result.depositAmount !== undefined && result.depositAmount !== amount) ||
+      (result.creditedAmount !== undefined && (!Number.isSafeInteger(result.creditedAmount) || result.creditedAmount !== amount + bonus))) {
+    throw new DepositVerificationPendingError();
+  }
+  return { ok: true, balance: result.balance, bonusAmount: bonus, creditedAmount: result.creditedAmount ?? amount,
+    message: "ငွေဖြည့်သွင်းပြီးပါပြီ။" };
 }
 
 export type WithdrawResult = {

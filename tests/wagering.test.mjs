@@ -41,8 +41,10 @@ before(async () => {
   await migration("005_skm_seamless_wallet.sql");
   await migration("008_deposit_wagering.sql");
   await migration("012_game_minor_units.sql");
+  await migration("013_first_deposit_bonus.sql");
 });
 beforeEach(async () => {
+  await db.exec("insert into public.deposit_bonus_campaign(singleton,starts_at) values(true,'infinity') on conflict(singleton) do update set starts_at=excluded.starts_at");
   await db.exec("truncate public.wallet_wagering_events, public.skm_wallet_transactions, public.skm_game_sessions, public.deposits, public.withdrawals, public.profiles restart identity cascade");
 });
 after(async () => { await db.close(); });
@@ -217,11 +219,13 @@ test("migration is repeatable and historical balances are not retroactively lock
     await migration("008_deposit_wagering.sql");
     await migration("008_deposit_wagering.sql");
     await migration("012_game_minor_units.sql");
+    await migration("013_first_deposit_bonus.sql");
     assert.equal(await remaining(user), 0n);
     assert.equal((await withdraw(user, 1000)).state, "reserved");
   } finally {
     await migration("008_deposit_wagering.sql");
     await migration("012_game_minor_units.sql");
+    await migration("013_first_deposit_bonus.sql");
   }
 });
 

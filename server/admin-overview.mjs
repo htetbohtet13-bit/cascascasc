@@ -32,7 +32,9 @@ export async function readAdminOverview(pool, range) {
               coalesce(sum(balance + balance_minor::numeric / 100), 0) as total_balance
          from public.profiles
      ), deposit_summary as (
-       select count(*) as deposit_count, coalesce(sum(amount), 0) as deposit_total
+       select count(*) as deposit_count, coalesce(sum(amount), 0) as deposit_total,
+              coalesce(sum(bonus_amount), 0) as bonus_total,
+              count(*) filter (where bonus_amount > 0) as bonus_count
          from public.deposits where status = 'verified' and ${inRange("coalesce(completed_at, created_at)")}
      ), withdrawal_summary as (
        select count(*) filter (where ${inRange("created_at")}) as withdrawal_count,

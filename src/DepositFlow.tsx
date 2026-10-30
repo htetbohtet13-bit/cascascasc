@@ -92,12 +92,16 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
   const receiptInputRef = useRef<HTMLInputElement>(null);
   const directingTimer = useRef<number | null>(null);
   const submissionStarted = useRef(false);
+  const [creditedBonus, setCreditedBonus] = useState(0);
 
   const numericAmount = Number(amount || 0);
   const bank = BANKS.find((item) => item.id === method);
   const paymentAccount = method && config ? config[method] : null;
   const account = paymentAccount?.receiver?.trim() ?? "";
   const receiverName = paymentAccount?.name?.trim() ?? "";
+  const promotion = config?.promotion;
+  const bonusQualifies = promotion?.eligible === true && Number.isSafeInteger(numericAmount) && numericAmount >= promotion.minimum;
+  const bonusRequirement = bonusQualifies ? ((BigInt(numericAmount) + BigInt(promotion.bonus)) * BigInt(promotion.multiplier)).toLocaleString("my-MM") : "";
 
   // Update the surrounding wallet before paint without remounting this flow,
   // so the bank, amount, receipt input and in-flight verification stay intact.
@@ -115,7 +119,7 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
         if (active) setConfig(data);
       })
       .catch((err) => {
-        if (active) setMessage(err instanceof Error ? err.message : "Could not load payment methods");
+        if (active) setMessage(err instanceof Error ? err.message : "ငွေပေးချေမှု အချက်အလက်များကို ဖွင့်မရပါ။ ပြန်လည်ဖွင့်ပါ။");
       })
       .finally(() => {
         if (active) setLoadingMethods(false);
@@ -171,11 +175,15 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
   }
 
   function continueFromAmount() {
+    if (!promotion) {
+      setMessage("ငွေသွင်းစည်းကမ်းများကို ဖွင့်မရသေးပါ။ စာမျက်နှာကို ပြန်လည်ဖွင့်ပါ။");
+      return;
+    }
     if (numericAmount < 1000) {
       setMessage("အနည်းဆုံး 1,000 Ks ထည့်ပါ");
       return;
     }
-    if (numericAmount > 50_000_000) {
+    if (!Number.isSafeInteger(numericAmount) || BigInt(numericAmount) + BigInt(bonusQualifies ? promotion.bonus : 0) > BigInt(Number.MAX_SAFE_INTEGER)) {
       setMessage("ပမာဏ အရမ်းများနေပါသည်");
       return;
     }
@@ -210,6 +218,7 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
     try {
       const result = await submitDeposit(method, numericAmount, receiptDigits);
       onBalance(result.balance);
+      setCreditedBonus(result.bonusAmount);
       setStatus("success");
       setStatusMessage(result.message || "လက်ကျန်ငွေ ထည့်ပြီးပါပြီ");
     } catch (err) {
@@ -324,7 +333,7 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
                 <input
                   value={amount}
                   onChange={(event) => {
-                    setAmount(event.target.value.replace(/\D/g, "").slice(0, 8));
+                    setAmount(event.target.value.replace(/\D/g, "").slice(0, 16));
                     setMessage(null);
                   }}
                   inputMode="numeric"
@@ -349,10 +358,16 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
                   </button>
                 ))}
               </div>
-              {numericAmount >= 5000 ? (
-                <div className="deposit-bonus">🎁 ကြိုဆိုဘောနပ်စ်အတွက် အရည်အချင်းပြည့်မီသည်</div>
-              ) : null}
             </div>
+            {promotion?.eligible ? (
+              <aside className="deposit-bonus-terms" aria-label="ဘောနပ်စ် စည်းကမ်းများ">
+                <strong>ကြိုဆိုဘောနပ်စ် ၅,၀၀၀ ကျပ်</strong>
+                <p>၅,၀၀၀ ကျပ်နှင့်အထက် ပထမဆုံးငွေသွင်းမှုအတွက် ဘောနပ်စ် ၅,၀၀၀ ကျပ် အလိုအလျောက်ရမည်။ အကောင့်တစ်ခုလျှင် တစ်ကြိမ်သာ ရရှိမည်။</p>
+                <p>ငွေသွင်းပမာဏနှင့် ဘောနပ်စ် စုစုပေါင်း၏ အဆ ၃၀ လောင်းကစားပြီးမှ ငွေထုတ်နိုင်မည်။ ဂိမ်းအားလုံး၏ အပြီးသတ်အလောင်းအစားများသာ အပြည့်အဝတွက်မည်။</p>
+                {bonusQualifies ? <p className="deposit-bonus-calculation">စုစုပေါင်းရမည့်ငွေ {(BigInt(numericAmount) + BigInt(promotion.bonus)).toLocaleString("my-MM")} ကျပ် · ဤငွေသွင်းမှုအတွက် လောင်းကစားရန် {bonusRequirement} ကျပ်</p> : <p>၅,၀၀၀ ကျပ်အောက် ငွေသွင်းပါက ဘောနပ်စ်အခွင့်အရေး မဆုံးရှုံးပါ။</p>}
+                <p>ယခင်ကျန်ရှိသော လောင်းကစားသတ်မှတ်ချက်များ ဆက်လက်သက်ရောက်မည်။ နောက်ထပ်ငွေသွင်းမှုများအတွက် ငွေသွင်းပမာဏအတိုင်း တစ်ဆ လောင်းကစားရမည်။</p>
+              </aside>
+            ) : null}
             {message ? <p className="deposit-error">{message}</p> : null}
             <button type="button" className="deposit-primary" onClick={continueFromAmount}>
               ရှေ့ဆက်မည်
@@ -449,6 +464,7 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
         {step === 4 && !directing ? (
           <PaymentResult kind="deposit" state={status === "verifying" || status === "idle" ? "processing" : status}
             amount={numericAmount} bank={bank ? { name: bank.label, image: bank.img } : undefined}
+            bonusAmount={creditedBonus}
             message={status === "verifying" ? "သင့်ငွေလွှဲမှုကို စစ်ဆေးနေပါသည်။" : status === "success" ? "သင့်လက်ကျန်ငွေထဲသို့ ထည့်သွင်းပြီးပါပြီ။" : statusMessage}
             onClose={onClose} onHistory={onHistory} />
         ) : null}

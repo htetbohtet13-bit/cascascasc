@@ -3,6 +3,7 @@ import { paymentConfig } from "./payment-env.mjs";
 import { wageringMessage, wageringTracker } from "./wagering.mjs";
 import { addMoney, money, moneyNumber, positiveMoney, subtractMoney } from "./money.mjs";
 import { payoutPolicy, payoutBlocked, checkPayoutLimits } from "./payout-security.mjs";
+import { BONUS_MIN_DEPOSIT, BONUS_MULTIPLIER, DEPOSIT_BONUS, depositBonusEligibility, depositCreditDetails } from "./deposit-bonus.mjs";
 
 // Use one lock order across deposits, reservations, refunds and completions.
 async function lockedProfile(client, userId) {
@@ -11,20 +12,21 @@ async function lockedProfile(client, userId) {
   return result;
 }
 
-export function walletMethods() {
+export async function walletMethods(userId) {
   const config = paymentConfig();
   return {
     kbzpay: { label: "KBZPay", receiver: config.kbzReceiver, name: config.kbzName },
     wavepay: { label: "WavePay", receiver: config.waveReceiver, name: config.waveName },
+    promotion: await depositBonusEligibility(getPool(), userId),
   };
 }
 
 export async function walletHistory(userId) {
   const result = await getPool().query(
-    `select 'deposit'::text as kind, service_type, amount, status, message, created_at, completed_at
+    `select 'deposit'::text as kind, service_type, amount, bonus_amount, status, message, created_at, completed_at
        from public.deposits where user_id = $1::uuid
      union all
-     select 'withdraw'::text as kind, service_type, amount, status, message, created_at, completed_at
+     select 'withdraw'::text as kind, service_type, amount, 0::bigint as bonus_amount, status, message, created_at, completed_at
        from public.withdrawals where user_id = $1::uuid
       order by created_at desc
       limit 50`,
@@ -47,7 +49,7 @@ export async function applyVerifiedDeposit({
     const profile = await lockedProfile(client, userId);
     if (!profile.rowCount) return { ok: false, message: "Profile not found" };
     const existingOrder = await client.query(
-      "select user_id, service_type, amount, transaction_id, status from public.deposits where order_id = $1 for update",
+      "select user_id, service_type, amount, bonus_amount, transaction_id, status from public.deposits where order_id = $1 for update",
       [orderId],
     );
     if (existingOrder.rowCount) {
@@ -58,7 +60,7 @@ export async function applyVerifiedDeposit({
           "select balance from public.profiles where id = $1::uuid",
           [userId],
         );
-        return { ok: true, balance: moneyNumber(balance.rows[0]?.balance ?? 0), message: "Deposit already added" };
+        return { ok: true, balance: moneyNumber(balance.rows[0]?.balance ?? 0), ...depositCreditDetails(order.amount, order.bonus_amount), message: "Deposit already added" };
       }
       return { ok: false, message: "Order already used" };
     }
@@ -69,7 +71,10 @@ export async function applyVerifiedDeposit({
     );
     if (existingTransaction.rowCount) return { ok: false, message: "This payment has already been added" };
 
-    const balance = addMoney(profile.rows[0].balance, amount);
+    const promotion = await depositBonusEligibility(client, userId);
+    const bonus = promotion.eligible && money(amount) >= BigInt(BONUS_MIN_DEPOSIT) ? DEPOSIT_BONUS : 0;
+    const credited = addMoney(amount, bonus);
+    const balance = addMoney(profile.rows[0].balance, credited);
     const wagering = await wageringTracker(client, userId);
     await wagering.resetIfEmpty(profile.rows[0].balance, `deposit:${orderId}`);
     await client.query(
@@ -78,12 +83,12 @@ export async function applyVerifiedDeposit({
     );
     await client.query(
       `insert into public.deposits
-         (user_id, service_type, order_id, amount, transaction_id, provider_txn_id, deposit_token, status, message, completed_at)
-       values ($1::uuid, $2, $3, $4, $5, nullif($6, ''), nullif($7, ''), 'verified', 'success', now())`,
-      [userId, serviceType, orderId, amount, transactionId, providerTransactionId, depositToken],
+         (user_id, service_type, order_id, amount, transaction_id, provider_txn_id, deposit_token, status, message, completed_at, bonus_amount)
+       values ($1::uuid, $2, $3, $4, $5, nullif($6, ''), nullif($7, ''), 'verified', 'success', clock_timestamp(), $8)`,
+      [userId, serviceType, orderId, amount, transactionId, providerTransactionId, depositToken, bonus],
     );
-    await wagering.addDeposit(amount, orderId);
-    return { ok: true, balance, message: "Deposit added" };
+    await wagering.addDeposit(credited, orderId, bonus ? BONUS_MULTIPLIER : 1);
+    return { ok: true, balance, ...depositCreditDetails(amount, bonus), message: "Deposit added" };
   });
 }
 

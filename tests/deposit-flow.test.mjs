@@ -47,7 +47,7 @@ test("only an explicit successful result with a safe numeric balance is displaye
   assert.equal(result.balance, 1500);
   assert.equal(sent.url, "/api/wallet/deposit");
   assert.equal(sent.options.credentials, "include");
-  assert.deepEqual(JSON.parse(sent.options.body), { service_type: "wavepay", amount: 1000, transaction_id: "000123" });
+  assert.deepEqual(JSON.parse(sent.options.body), { service_type: "wavepay", amount: 1000, transaction_id: "000123", bonus_terms_version: 1 });
 });
 
 test("known rejected verification replies retain a Burmese error rather than claiming a credit", async () => {
@@ -73,7 +73,7 @@ function text(tree) {
   return tree && typeof tree === "object" ? text(tree.props?.children) : "";
 }
 
-function componentHarness(depositReply) {
+function componentHarness(depositReply, promotion = { eligible: false, bonus: 5000, minimum: 5000, multiplier: 30 }) {
   const states = [];
   const effects = [];
   const timers = new Map();
@@ -106,7 +106,7 @@ function componentHarness(depositReply) {
   };
   const api = walletLibrary(async (url, options) => {
     calls.push({ url, options });
-    if (url === "/api/wallet/config") return reply({ kbzpay: { receiver: "09900000000", name: "Test receiver" }, wavepay: { receiver: "09900000001", name: "Test receiver" } });
+    if (url === "/api/wallet/config") return reply({ promotion, kbzpay: { receiver: "09900000000", name: "Test receiver" }, wavepay: { receiver: "09900000001", name: "Test receiver" } });
     assert.equal(url, "/api/wallet/deposit");
     return depositReply();
   });
@@ -147,10 +147,13 @@ function componentHarness(depositReply) {
   const button = (label) => find(render(), (node) => node.type === "button" && text(node) === label);
   render();
   return { render, settle, button, balances, timers, calls, closes: () => closes, histories: () => histories,
-    async toReceipt() {
+    async toAmount(value = "1000") {
       await settle();
       find(render(), (node) => node.type === "button" && node.props.className === "deposit-bank-card kbz").props.onClick();
-      find(render(), (node) => node.type === "input" && node.props["aria-label"] === "ငွေပမာဏ").props.onChange({ target: { value: "1000" } });
+      find(render(), (node) => node.type === "input" && node.props["aria-label"] === "ငွေပမာဏ").props.onChange({ target: { value } });
+    },
+    async toReceipt(value = "1000") {
+      await this.toAmount(value);
       button("ရှေ့ဆက်မည်").props.onClick();
       await settle(); fire(2200); await settle();
       find(render(), (node) => node.type === "input" && node.props["aria-label"] === "ပြေစာနောက်ဆုံး 6 လုံး").props.onChange({ target: { value: "456789" } });
@@ -192,4 +195,47 @@ test("rapid deposit confirmations invoke verification only once", async () => {
   assert.ok(![...app.timers.values()].some((timer) => !timer.repeat && timer.delay === 1000));
   app.button("ပြီးပါပြီ").props.onClick();
   assert.equal(app.closes(), 1);
+});
+
+test("eligible players see fixed bonus and exact 30x terms before payment; ineligible players see no bonus promise", async () => {
+  const promotion = { eligible: true, bonus: 5000, minimum: 5000, multiplier: 30 };
+  for (const [amount, requirement, total] of [["5000", 300000n, 10000n], ["10000", 450000n, 15000n]]) {
+    const app = componentHarness(() => { throw new Error("No verification before payment"); }, promotion);
+    await app.toAmount(amount);
+    const content = text(app.render());
+    assert.ok(content.includes("ကြိုဆိုဘောနပ်စ် ၅,၀၀၀ ကျပ်"));
+    assert.ok(content.includes("အလိုအလျောက်")); assert.ok(content.includes("အကောင့်တစ်ခုလျှင် တစ်ကြိမ်သာ"));
+    assert.ok(content.includes(requirement.toLocaleString("my-MM"))); assert.ok(content.includes(total.toLocaleString("my-MM")));
+    assert.equal(app.calls.filter((call) => call.url === "/api/wallet/deposit").length, 0);
+  }
+  const app = componentHarness(() => reply({ ok: true, balance: 10000 }));
+  await app.toAmount("5000"); assert.ok(!text(app.render()).includes("ကြိုဆိုဘောနပ်စ်"));
+});
+
+test("a confirmed bonus receipt displays cash, bonus and total separately", async () => {
+  const app = componentHarness(() => reply({ ok: true, balance: 10000, depositAmount: 5000, bonusAmount: 5000, creditedAmount: 10000 }), { eligible: true, bonus: 5000, minimum: 5000, multiplier: 30 });
+  await app.toReceipt("5000"); app.button("အတည်ပြုမည်").props.onClick(); await app.settle();
+  assert.deepEqual(app.balances, [10000]);
+  const details = find(app.render(), (node) => node.type === "dl" && node.props.className.includes("payment-result-bonus"));
+  assert.ok(details); const lines = details.props.children.map(text);
+  assert.ok(lines[0].includes("5,000")); assert.ok(lines[1].includes("+5,000")); assert.ok(lines[2].includes("10,000"));
+  assert.ok(!text(app.render()).includes("Remaining"));
+});
+
+test("inconsistent bonus receipts remain unconfirmed instead of displaying invented credit", async () => {
+  for (const fields of [
+    { bonusAmount: 9999, depositAmount: 5000, creditedAmount: 14999 },
+    { bonusAmount: 5000 }, { bonusAmount: 5000, depositAmount: 10000, creditedAmount: 15000 },
+    { bonusAmount: 5000, depositAmount: 5000, creditedAmount: 5000 },
+  ]) {
+    const api = walletLibrary(async () => reply({ ok: true, balance: 10000, ...fields }));
+    await assert.rejects(() => api.submitDeposit("kbzpay", 5000, "123456"), api.DepositVerificationPendingError);
+  }
+});
+
+test("unavailable promotion terms cannot advance the player to payment", async () => {
+  const app = componentHarness(() => { throw new Error("No payment call expected"); }, null);
+  await app.toAmount("5000"); app.button("ရှေ့ဆက်မည်").props.onClick(); await app.settle();
+  assert.ok(text(app.render()).includes("ငွေသွင်းစည်းကမ်းများကို ဖွင့်မရသေးပါ"));
+  assert.ok(!find(app.render(), (node) => node.props?.className === "deposit-directing"));
 });

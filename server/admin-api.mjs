@@ -241,6 +241,7 @@ async function walletList(pool, url, kind) {
     pool.query(
       `select w.order_id, w.user_id, p.phone, w.service_type, w.amount, w.status,
               w.message, w.created_at, w.completed_at, w.provider_txn_id,
+              ${kind === "deposit" ? "w.bonus_amount" : "0::bigint"} as bonus_amount,
               ${kind === "deposit" ? "w.transaction_id" : "w.payout_phone"} as reference
          from public.${table} w join public.profiles p on p.id = w.user_id
         where ($1 = '' or p.phone ilike $2 or p.id::text ilike $2 or w.order_id ilike $2)
@@ -260,14 +261,15 @@ async function walletList(pool, url, kind) {
 
 async function userDetails(pool, userId) {
   if (!UUID_RE.test(userId)) return { status: 400, body: { error: "Invalid user id" } };
-  const [profile, bets, deposits, withdrawals] = await Promise.all([
+  const [profile, bets, deposits, withdrawals, bonus] = await Promise.all([
     pool.query("select id, phone, balance + balance_minor::numeric / 100 as balance, created_at from public.profiles where id = $1::uuid", [userId]),
     playerGameHistory(pool, userId, 25),
-    pool.query("select order_id, service_type, amount, transaction_id, status, message, created_at, completed_at from public.deposits where user_id = $1::uuid order by created_at desc limit 25", [userId]),
+    pool.query("select order_id, service_type, amount, bonus_amount, transaction_id, status, message, created_at, completed_at from public.deposits where user_id = $1::uuid order by created_at desc limit 25", [userId]),
     pool.query("select order_id, service_type, amount, payout_phone, provider_txn_id, status, message, created_at, completed_at from public.withdrawals where user_id = $1::uuid order by created_at desc limit 25", [userId]),
+    pool.query("select order_id, amount, bonus_amount, completed_at, (amount::numeric + bonus_amount) * 30 as wagering_required from public.deposits where user_id = $1::uuid and bonus_amount > 0", [userId]),
   ]);
   if (!profile.rowCount) return { status: 404, body: { error: "User not found" } };
-  return { user: profile.rows[0], bets, deposits: deposits.rows, withdrawals: withdrawals.rows };
+  return { user: profile.rows[0], bets, deposits: deposits.rows, withdrawals: withdrawals.rows, bonus: bonus.rows[0] ?? null };
 }
 
 export async function handleAdminApi(req) {

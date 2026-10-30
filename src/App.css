@@ -4520,7 +4520,13 @@
 .payment-result-amount small { display: block; color: #8a795b; font-size: 10px; line-height: 1.8; }
 .payment-result-amount strong { display: block; margin-top: 6px; color: #372b1b; font-size: clamp(26px, 8vw, 34px); font-weight: 850; line-height: 1.5; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .payment-result-amount strong span { color: #8a795b; font-size: 12px; font-weight: 600; }
+.deposit-bonus-terms { margin: 14px 0; padding: 14px 16px; border: 1px solid #e5d1a6; border-radius: 14px; background: #fff7e7; color: #66512d; font-size: 12px; line-height: 1.9; }
+.deposit-bonus-terms strong { display: block; color: #77501b; font-size: 14px; }
+.deposit-bonus-terms p { margin: 7px 0 0; }
+.deposit-bonus-calculation { font-weight: 700; }
+.wallet-history-amount > small { color: #8a641c; font-size: 10px; }
 .payment-result-details { margin: 0 20px; }
+.payment-result-bonus > div:last-child dd { color: #8a641c; }
 .payment-result-details > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 0; border-bottom: 1px solid #efe6d8; }
 .payment-result-details dt { min-width: 0; color: #8a7c68; font-size: 11px; line-height: 1.8; }
 .payment-result-details dd { display: flex; flex-shrink: 0; align-items: center; gap: 7px; margin: 0; color: #443724; font-size: 12px; font-weight: 750; }

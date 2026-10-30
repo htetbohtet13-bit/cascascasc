@@ -67,6 +67,7 @@ function WalletHistory() {
             </div>
             <div className="wallet-history-amount">
               <strong>{isDeposit ? "+" : "−"}{Number(item.amount).toLocaleString("en-US")} Ks</strong>
+              {isDeposit && Number(item.bonus_amount) > 0 ? <small>ဘောနပ်စ် +{Number(item.bonus_amount).toLocaleString("en-US")} ကျပ်</small> : null}
               <span className={`wallet-history-status ${item.status}`}>{status}</span>
             </div>
           </article>

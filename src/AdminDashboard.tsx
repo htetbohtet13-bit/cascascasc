@@ -21,6 +21,7 @@ type BetRow = {
 type WalletRow = {
   order_id: string; user_id: string; phone: string; service_type: string;
   amount: number | string; status: string; message: string | null; created_at: string;
+  bonus_amount?: number | string;
   completed_at: string | null; provider_txn_id?: string | null; payout_phone?: string | null; reference?: string | null;
 };
 type Summary = Record<string, number | string>;
@@ -38,7 +39,8 @@ type Payload = {
   users?: UserRow[]; games?: ProviderGame[]; bets?: BetRow[]; deposits?: WalletRow[]; withdrawals?: WalletRow[];
   user?: UserRow; total?: number; page?: number; pageSize?: number; settingsConfigured?: boolean;
 };
-type UserDetail = Payload & { user: UserRow; bets: BetRow[]; deposits: WalletRow[]; withdrawals: WalletRow[] };
+type UserDetail = Payload & { user: UserRow; bets: BetRow[]; deposits: WalletRow[]; withdrawals: WalletRow[];
+  bonus?: { order_id: string; amount: string | number; bonus_amount: string | number; wagering_required: string; completed_at: string } | null };
 
 const SECTIONS: { id: Section; label: string; mark: string }[] = [
   { id: "overview", label: "Overview", mark: "▦" },
@@ -304,6 +306,7 @@ export default function AdminDashboard() {
               <div className="admin-detail-card"><small>Provider player ID</small><strong>{detail.user.id}</strong></div>
               <div className="admin-detail-card"><small>Joined</small><strong>{date(detail.user.created_at)}</strong></div>
               <div className="admin-detail-card"><small>Total bets shown</small><strong>{detail.bets?.length ?? 0}</strong></div>
+              {detail.bonus ? <div className="admin-detail-card"><small>Welcome bonus awarded · {date(detail.bonus.completed_at)}</small><strong>{money(detail.bonus.bonus_amount)}</strong><p>Deposit: {money(detail.bonus.amount)} · Initial wagering: {money(detail.bonus.wagering_required)}</p><small>Order: {detail.bonus.order_id}</small></div> : null}
             </div>
             <div className="admin-detail-sections">
               <DetailBets bets={detail.bets ?? []} />
@@ -348,6 +351,7 @@ function Overview({ data, loading, onOpen, range, onRangeChange }: { data: Paylo
     ["Settled bet volume", money(summary.bet_total), "Reported wins", money(summary.win_total), "bets"],
     ["Pending withdrawals", summary.pending_withdrawals, "Failed in range", summary.failed_withdrawals, "withdrawals"],
     ["Game catalog", summary.active_games, "Total games", summary.games_total, "games"],
+    ["Welcome bonuses", money(summary.bonus_total), "Awards in range", summary.bonus_count, "deposits"],
   ] as const;
   return (
     <div className="admin-page-content">
@@ -596,7 +600,7 @@ function BetsTable({ bets, loading, onSelect, compact = false }: { bets: BetRow[
 
 function WalletTable({ rows, loading, onSelect, kind, compact = false }: { rows: WalletRow[]; loading: boolean; onSelect: (id: string) => void; kind: "deposit" | "withdrawal"; compact?: boolean }) {
   if (!rows.length) return <TableEmpty loading={loading} />;
-  return <div className={`admin-table-wrap${compact ? " compact" : ""}`}><table className="admin-table"><thead><tr><th>Player</th><th>Method</th><th>{kind === "deposit" ? "Receipt reference" : "Payout phone"}</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>{rows.map((row) => <tr key={row.order_id}><td><button type="button" className="admin-player-link" onClick={() => onSelect(row.user_id)}>{row.phone}</button><small>{row.order_id}</small></td><td>{row.service_type === "kbzpay" ? "KBZPay" : "WavePay"}</td><td>{row.reference || row.payout_phone || row.provider_txn_id || "—"}</td><td className="admin-number">{money(row.amount)}</td><td><Status value={row.status} /></td><td>{date(row.created_at)}</td></tr>)}</tbody></table></div>;
+  return <div className={`admin-table-wrap${compact ? " compact" : ""}`}><table className="admin-table"><thead><tr><th>Player</th><th>Method</th><th>{kind === "deposit" ? "Receipt reference" : "Payout phone"}</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>{rows.map((row) => <tr key={row.order_id}><td><button type="button" className="admin-player-link" onClick={() => onSelect(row.user_id)}>{row.phone}</button><small>{row.order_id}</small></td><td>{row.service_type === "kbzpay" ? "KBZPay" : "WavePay"}</td><td>{row.reference || row.payout_phone || row.provider_txn_id || "—"}</td><td className="admin-number">{money(row.amount)}{Number(row.bonus_amount) > 0 ? <small>Bonus +{money(row.bonus_amount)}</small> : null}</td><td><Status value={row.status} /></td><td>{date(row.created_at)}</td></tr>)}</tbody></table></div>;
 }
 
 function DetailBets({ bets }: { bets: BetRow[] }) {
@@ -604,5 +608,5 @@ function DetailBets({ bets }: { bets: BetRow[] }) {
 }
 
 function DetailWallet({ title, rows }: { title: string; rows: WalletRow[] }) {
-  return <section className="admin-panel"><div className="admin-panel-heading"><div><span>PLAYER WALLET</span><h3>{title}</h3></div></div>{rows.length ? <div className="admin-detail-records">{rows.map((row) => <div key={row.order_id}><span>{row.service_type === "kbzpay" ? "KBZPay" : "WavePay"}<small>{date(row.created_at)}</small></span><strong>{money(row.amount)}<small><Status value={row.status} /></small></strong></div>)}</div> : <TableEmpty loading={false} />}</section>;
+  return <section className="admin-panel"><div className="admin-panel-heading"><div><span>PLAYER WALLET</span><h3>{title}</h3></div></div>{rows.length ? <div className="admin-detail-records">{rows.map((row) => <div key={row.order_id}><span>{row.service_type === "kbzpay" ? "KBZPay" : "WavePay"}<small>{date(row.created_at)}</small></span><strong>{money(row.amount)}{Number(row.bonus_amount) > 0 ? <small>Bonus +{money(row.bonus_amount)}</small> : null}<small><Status value={row.status} /></small></strong></div>)}</div> : <TableEmpty loading={false} />}</section>;
 }

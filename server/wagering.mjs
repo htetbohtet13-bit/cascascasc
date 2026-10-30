@@ -23,7 +23,11 @@ export function remainingWagering(events) {
     if (scale !== 1n && scale !== 100n) throw new Error("Invalid wagering amount scale");
     const amount = BigInt(event.amount) * (100n / scale);
     if (event.kind === "RESET") remaining = 0n;
-    else if (event.kind === "DEPOSIT") remaining += amount;
+    else if (event.kind === "DEPOSIT") {
+      const multiplier = BigInt(event.wagering_multiplier ?? 1);
+      if (multiplier !== 1n && multiplier !== 30n) throw new Error("Invalid wagering multiplier");
+      remaining += amount * multiplier;
+    }
     else if (event.kind === "BET" && event.state === "SETTLED") {
       remaining = remaining > amount ? remaining - amount : 0n;
     }
@@ -47,12 +51,12 @@ export async function wageringTracker(client, userId) {
     throw error;
   }
 
-  async function record(kind, amount, sourceId, state = "SETTLED", amountScale = 1) {
+  async function record(kind, amount, sourceId, state = "SETTLED", amountScale = 1, multiplier = 1) {
     await client.query(
-      `insert into public.wallet_wagering_events (user_id, kind, amount, source_id, state, amount_scale)
-       values ($1::uuid, $2, $3, $4, $5, $6)
+      `insert into public.wallet_wagering_events (user_id, kind, amount, source_id, state, amount_scale, wagering_multiplier)
+       values ($1::uuid, $2, $3, $4, $5, $6, $7)
        on conflict (kind, source_id) do nothing`,
-      [userId, kind, String(amount), sourceId, state, amountScale],
+      [userId, kind, String(amount), sourceId, state, amountScale, multiplier],
     );
   }
 
@@ -82,7 +86,7 @@ export async function wageringTracker(client, userId) {
 
   async function remaining() {
     const result = await client.query(
-      `select kind, amount, state, amount_scale from public.wallet_wagering_events
+      `select kind, amount, state, amount_scale, wagering_multiplier from public.wallet_wagering_events
         where user_id = $1::uuid
           and id > coalesce((select id from public.wallet_wagering_events
                              where user_id = $1::uuid and kind = 'RESET'
@@ -94,7 +98,7 @@ export async function wageringTracker(client, userId) {
   }
 
   return {
-    addDeposit: (amount, orderId) => record("DEPOSIT", amount, orderId),
+    addDeposit: (amount, orderId, multiplier = 1) => record("DEPOSIT", amount, orderId, "SETTLED", 1, multiplier),
     addBet: (amount, debitId, scale = 1) => record("BET", amount, debitId, "PENDING", scale),
     settleBet: (debitId) => closeBet(debitId, "SETTLED"),
     cancelBet: (debitId) => closeBet(debitId, "CANCELLED"),

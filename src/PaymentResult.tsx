@@ -2,6 +2,7 @@ type Props = {
   kind: "deposit" | "withdraw";
   state: "processing" | "success" | "pending" | "failed";
   amount: number;
+  bonusAmount?: number;
   bank?: { name: string; image: string };
   phone?: string;
   message: string;
@@ -10,7 +11,7 @@ type Props = {
   onRetry?: () => void;
 };
 
-export default function PaymentResult({ kind, state, amount, bank, phone, message, onClose, onHistory, onRetry }: Props) {
+export default function PaymentResult({ kind, state, amount, bonusAmount = 0, bank, phone, message, onClose, onHistory, onRetry }: Props) {
   const processing = state === "processing";
   const success = state === "success";
   const title = processing
@@ -45,6 +46,13 @@ export default function PaymentResult({ kind, state, amount, bank, phone, messag
             <strong>{amount.toLocaleString("en-US")} <span>ကျပ်</span></strong>
           </div>
         </div>
+        {success && kind === "deposit" && bonusAmount > 0 ? (
+          <dl className="payment-result-details payment-result-bonus">
+            <div><dt>သွင်းငွေ</dt><dd>{amount.toLocaleString("en-US")} ကျပ်</dd></div>
+            <div><dt>ကြိုဆိုဘောနပ်စ်</dt><dd>+{bonusAmount.toLocaleString("en-US")} ကျပ်</dd></div>
+            <div><dt>စုစုပေါင်း ဖြည့်သွင်းပြီးငွေ</dt><dd>{(amount + bonusAmount).toLocaleString("en-US")} ကျပ်</dd></div>
+          </dl>
+        ) : null}
         {bank ? (
           <dl className="payment-result-details">
             <div><dt>ငွေပေးချေမှုနည်းလမ်း</dt><dd><img src={bank.image} alt="" /><span>{bank.name}</span></dd></div>

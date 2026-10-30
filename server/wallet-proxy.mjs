@@ -3,6 +3,8 @@ import { currentSession } from "./auth.mjs";
 import { paymentConfig } from "./payment-env.mjs";
 import { unsafeRequestError } from "./request-security.mjs";
 import { consumeRateLimit } from "./rate-limit.mjs";
+import { BONUS_MIN_DEPOSIT, depositBonusEligibility } from "./deposit-bonus.mjs";
+import { getPool } from "./neon.mjs";
 import { applyVerifiedDeposit, completeWithdraw, recordWithdrawTransfer, releaseWithdraw, reserveWithdraw, walletHistory, walletMethods } from "./wallet.mjs";
 
 const amountOf = (value) => typeof value === "number" ? value : NaN;
@@ -69,7 +71,12 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
   const config = paymentConfig();
 
   if (functionName === "wallet-config") {
-    return { status: 200, body: walletMethods() };
+    try {
+      return { status: 200, body: await walletMethods(userId) };
+    } catch (error) {
+      console.error("Wallet configuration lookup failed", error);
+      return { status: 503, body: { error: "ငွေသွင်းစည်းကမ်းများကို ဖွင့်မရသေးပါ။ ခဏစောင့်ပြီး ပြန်လည်ဖွင့်ပါ။" } };
+    }
   }
   if (functionName === "wallet-history") {
     try {
@@ -98,6 +105,12 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       if (!config.apiKey || !receiver) return { status: 500, body: { error: "Payment is not configured" } };
       const limited = await consumeRateLimit(req, "deposit-verify", userId);
       if (limited) return limited;
+      // Old cached forms did not disclose bonus wagering. Refresh them before
+      // verifying a payment, so an automatic award never introduces hidden terms.
+      if (amount >= BONUS_MIN_DEPOSIT && payload.bonus_terms_version !== 1 &&
+          (await depositBonusEligibility(getPool(), userId)).eligible) {
+        return failure(409, "BONUS_TERMS_REFRESH", "ဘောနပ်စ် စည်းကမ်းများကို ကြည့်ရန် ငွေသွင်းစာမျက်နှာကို ပြန်လည်ဖွင့်ပါ။");
+      }
       let response;
       try {
         log("verification_started");
