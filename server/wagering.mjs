@@ -19,13 +19,17 @@ export function wageredStake(payload) {
 export function remainingWagering(events) {
   let remaining = 0n;
   for (const event of events) {
+    const scale = BigInt(event.amount_scale ?? 1);
+    if (scale !== 1n && scale !== 100n) throw new Error("Invalid wagering amount scale");
+    const amount = BigInt(event.amount) * (100n / scale);
     if (event.kind === "RESET") remaining = 0n;
-    else if (event.kind === "DEPOSIT") remaining += BigInt(event.amount);
+    else if (event.kind === "DEPOSIT") remaining += amount;
     else if (event.kind === "BET" && event.state === "SETTLED") {
-      remaining = remaining > BigInt(event.amount) ? remaining - BigInt(event.amount) : 0n;
+      remaining = remaining > amount ? remaining - amount : 0n;
     }
   }
-  return remaining;
+  // Bank withdrawals are whole kyat. Never waive an unfinished fraction.
+  return (remaining + 99n) / 100n;
 }
 
 export function wageringMessage(remaining) {
@@ -43,12 +47,12 @@ export async function wageringTracker(client, userId) {
     throw error;
   }
 
-  async function record(kind, amount, sourceId, state = "SETTLED") {
+  async function record(kind, amount, sourceId, state = "SETTLED", amountScale = 1) {
     await client.query(
-      `insert into public.wallet_wagering_events (user_id, kind, amount, source_id, state)
-       values ($1::uuid, $2, $3, $4, $5)
+      `insert into public.wallet_wagering_events (user_id, kind, amount, source_id, state, amount_scale)
+       values ($1::uuid, $2, $3, $4, $5, $6)
        on conflict (kind, source_id) do nothing`,
-      [userId, kind, String(amount), sourceId, state],
+      [userId, kind, String(amount), sourceId, state, amountScale],
     );
   }
 
@@ -67,16 +71,18 @@ export async function wageringTracker(client, userId) {
          exists (select 1 from public.skm_wallet_transactions
                   where user_id = $1::uuid and kind = 'DEBIT' and status = 'APPLIED') as game_hold,
          exists (select 1 from public.withdrawals
-                  where user_id = $1::uuid and status = 'pending') as withdrawal_hold`,
+                  where user_id = $1::uuid and status = 'pending') as withdrawal_hold,
+         exists (select 1 from public.profiles
+                  where id = $1::uuid and balance_minor > 0) as fractional_balance`,
       [userId],
     );
-    if (outstanding.rows[0]?.game_hold || outstanding.rows[0]?.withdrawal_hold) return;
+    if (outstanding.rows[0]?.game_hold || outstanding.rows[0]?.withdrawal_hold || outstanding.rows[0]?.fractional_balance) return;
     await record("RESET", 0, sourceId);
   }
 
   async function remaining() {
     const result = await client.query(
-      `select kind, amount, state from public.wallet_wagering_events
+      `select kind, amount, state, amount_scale from public.wallet_wagering_events
         where user_id = $1::uuid
           and id > coalesce((select id from public.wallet_wagering_events
                              where user_id = $1::uuid and kind = 'RESET'
@@ -89,7 +95,7 @@ export async function wageringTracker(client, userId) {
 
   return {
     addDeposit: (amount, orderId) => record("DEPOSIT", amount, orderId),
-    addBet: (amount, debitId) => record("BET", amount, debitId, "PENDING"),
+    addBet: (amount, debitId, scale = 1) => record("BET", amount, debitId, "PENDING", scale),
     settleBet: (debitId) => closeBet(debitId, "SETTLED"),
     cancelBet: (debitId) => closeBet(debitId, "CANCELLED"),
     resetIfEmpty,

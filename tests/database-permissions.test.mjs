@@ -12,7 +12,7 @@ async function migration(name) {
 before(async () => {
   for (const name of ["001_app_schema.sql", "002_phone_auth.sql", "005_skm_seamless_wallet.sql",
     "006_game_display_settings.sql", "007_game_hot_setting.sql", "008_deposit_wagering.sql",
-    "009_auth_security.sql", "010_money_constraints.sql", "011_runtime_role.sql"]) await migration(name);
+    "009_auth_security.sql", "010_money_constraints.sql", "011_runtime_role.sql", "012_game_minor_units.sql"]) await migration(name);
 });
 after(async () => { await db.close(); });
 

@@ -41,7 +41,7 @@ async function migration(name) {
 }
 before(async () => {
   mock.method(console, "info", () => {});
-  for (const name of ["001_app_schema.sql", "005_skm_seamless_wallet.sql", "008_deposit_wagering.sql", "010_money_constraints.sql"]) await migration(name);
+  for (const name of ["001_app_schema.sql", "005_skm_seamless_wallet.sql", "008_deposit_wagering.sql", "010_money_constraints.sql", "012_game_minor_units.sql"]) await migration(name);
 });
 beforeEach(async () => {
   await db.exec("truncate public.wallet_wagering_events, public.skm_wallet_transactions, public.skm_game_sessions, public.deposits, public.withdrawals, public.profiles restart identity cascade");
@@ -67,7 +67,15 @@ async function balance(user) { return (await db.query("select balance::text from
 function deposit(user, amount, id = randomUUID()) { return applyVerifiedDeposit({ userId: user.userId, amount, orderId: id, transactionId: id, providerTransactionId: id, depositToken: "", serviceType: "kbzpay" }); }
 function reserve(user, amount, orderId = randomUUID()) { return reserveWithdraw({ userId: user.userId, amount, orderId, serviceType: "kbzpay", phone: "09123456789" }); }
 function event(user, amount = 100) { return { player_id: user.player_id, token: user.token, currency: "MMK", round_id: randomUUID(), transaction_id: randomUUID(), game_code: "goldencentury", reason: "BET_HOLD", amount }; }
-const callback = (route, payload) => processSkmWalletCallback(route, payload, JSON.stringify(payload));
+// Existing business fixtures are in app kyat; wire fixtures use minor units.
+const providerPayload = (payload) => ({ ...payload,
+  ...(typeof payload.amount === "number" ? { amount: payload.amount * 100 } : {}),
+  ...(typeof payload.stake === "number" ? { stake: payload.stake * 100 } : {}),
+});
+const callback = (route, payload) => {
+  const wire = providerPayload(payload);
+  return processSkmWalletCallback(route, wire, JSON.stringify(wire));
+};
 const credit = (debit, amount) => ({ ...debit, transaction_id: randomUUID(), debit_transaction_id: debit.transaction_id, amount, reason: "BET_SETTLE", round_closed: true });
 const rollback = (debit) => ({ ...debit, transaction_id: randomUUID(), debit_transaction_id: debit.transaction_id });
 const req = () => ({ method: "POST", headers: { origin: "https://www.j777ml.com", "content-type": "application/json" }, socket: { remoteAddress: "127.0.0.1" } });
@@ -180,7 +188,7 @@ test("captured signed rollback replayed to debit cannot debit or suppress the re
   paymentEnv(t);
   const user = await player(1000); const debit = event(user);
   assert.equal((await callback("debit", debit)).status, "OK");
-  const refund = rollback(debit);
+  const refund = providerPayload(rollback(debit));
   const signed = signedSkmResponse(refund);
   const headers = Object.fromEntries(Object.entries(signed.headers).map(([k,v]) => [k.toLowerCase(),v]));
   assert.equal(verifySkmRequest({ headers, rawBody: Buffer.from(signed.rawBody) }).ok, true);
@@ -223,9 +231,10 @@ test("rollback details must match the original debit before funds return", async
 });
 
 test("overflowing game credit stays open and can be reconciled without a partial credit", async () => {
-  const user = await player(MAX_MONEY); const debit = event(user); await callback("debit", debit);
+  const maxGameKyat = MAX_MONEY / 100n;
+  const user = await player(maxGameKyat); const debit = event(user); await callback("debit", debit);
   assert.equal((await callback("credit", credit(debit, 101))).status, "ERROR");
-  assert.equal(await balance(user), String(MAX_MONEY - 100n));
+  assert.equal(await balance(user), String(maxGameKyat - 100n));
   assert.equal((await db.query("select status from public.skm_wallet_transactions where transaction_id=$1", [debit.transaction_id])).rows[0].status, "APPLIED");
   assert.equal((await callback("credit", credit(debit, 100))).status, "OK");
 });

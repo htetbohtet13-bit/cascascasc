@@ -9,7 +9,7 @@
     "start": "node server/index.mjs",
     "build": "vite build",
     "test:wagering": "node --experimental-test-module-mocks --test tests/wagering.test.mjs",
-    "test:security": "node --experimental-test-module-mocks --test --test-concurrency=1 tests/auth-security.test.mjs tests/admin-mfa.test.mjs tests/admin-logout.test.mjs tests/withdraw-flow.test.mjs tests/deposit-flow.test.mjs tests/neon-tls.test.mjs tests/money-security.test.mjs tests/provider-security.test.mjs tests/wagering.test.mjs tests/database-permissions.test.mjs",
+    "test:security": "node --experimental-test-module-mocks --test --test-concurrency=1 tests/auth-security.test.mjs tests/admin-mfa.test.mjs tests/admin-logout.test.mjs tests/withdraw-flow.test.mjs tests/deposit-flow.test.mjs tests/neon-tls.test.mjs tests/money-security.test.mjs tests/game-money.test.mjs tests/provider-security.test.mjs tests/wagering.test.mjs tests/database-permissions.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

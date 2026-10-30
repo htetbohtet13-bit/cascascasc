@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { getPool, withTransaction } from "./neon.mjs";
 import { wageredStake, wageringTracker } from "./wagering.mjs";
 import { addMoney, moneyNumber, subtractMoney } from "./money.mjs";
+import { gameBalance, splitGameBalance } from "./game-money.mjs";
 
 const CURRENCY = "MMK";
 const MAX_AMOUNT = Number.MAX_SAFE_INTEGER;
@@ -23,9 +24,9 @@ function integerAmount(value, allowZero) {
   return amount;
 }
 
-function safeBalance(value) {
+function safeBalance(value, remainder = 0) {
   try {
-    return moneyNumber(value);
+    return gameBalance(value, remainder);
   } catch {
     return null;
   }
@@ -72,7 +73,7 @@ export async function createSkmGameSession(userId) {
 
 async function findPlayer(client, fields, { requireActive = false, lock = false } = {}) {
   const result = await client.query(
-    `select p.id, p.balance, s.is_active,
+    `select p.id, p.balance, p.balance_minor, s.is_active,
             (s.expires_at <= now()) as is_expired
        from public.skm_game_sessions s
        join public.profiles p on p.id = s.user_id
@@ -87,7 +88,7 @@ async function findPlayer(client, fields, { requireActive = false, lock = false 
 }
 
 function response(status, fields, extra = {}) {
-  const balance = fields?.balance == null ? null : safeBalance(fields.balance);
+  const balance = fields?.balance == null ? null : safeBalance(fields.balance, fields.balance_minor);
   return {
     status,
     balance: balance === null ? undefined : balance,
@@ -130,11 +131,11 @@ async function priorTransaction(client, fields) {
   );
 }
 
-function duplicateResult(row, userId, fields, balance, expectedKind) {
+function duplicateResult(row, userId, fields, player, expectedKind) {
   if (row.kind !== expectedKind || row.user_id !== userId || row.payload_hash !== digest(fields.rawBody)) {
-    return response("ERROR", { balance }, { message: "Transaction ID was already used with different details" });
+    return response("ERROR", player, { message: "Transaction ID was already used with different details" });
   }
-  return response("DUPLICATE", { balance }, { operator_transaction_id: row.id });
+  return response("DUPLICATE", player, { operator_transaction_id: row.id });
 }
 
 async function recordTransaction(client, fields, kind, status, balanceAfter) {
@@ -142,8 +143,8 @@ async function recordTransaction(client, fields, kind, status, balanceAfter) {
   await client.query(
     `insert into public.skm_wallet_transactions
        (id, transaction_id, user_id, player_id, currency, kind, reason, amount,
-        round_id, game_code, debit_transaction_id, payload_hash, status, balance_after)
-     values ($1::uuid, $2, $3::uuid, $4, $5, $6, $7, $8, $9, $10, nullif($11, ''), $12, $13, $14)`,
+        round_id, game_code, debit_transaction_id, payload_hash, status, balance_after, unit_scale)
+     values ($1::uuid, $2, $3::uuid, $4, $5, $6, $7, $8, $9, $10, nullif($11, ''), $12, $13, $14, 100)`,
     [id, fields.transactionId, fields.userId, fields.playerId, fields.currency, kind,
       fields.reason, fields.amount, fields.roundId, fields.gameCode, fields.debitTransactionId ?? "",
       digest(fields.rawBody), status, balanceAfter],
@@ -161,7 +162,7 @@ async function balanceRequest(payload) {
     return response("ERROR", null, { message: "Invalid balance request" });
   }
   const result = await getPool().query(
-    `select p.id, p.balance, s.is_active, (s.expires_at <= now()) as is_expired
+    `select p.id, p.balance, p.balance_minor, s.is_active, (s.expires_at <= now()) as is_expired
        from public.skm_game_sessions s
        join public.profiles p on p.id = s.user_id
       where s.user_id::text = $1 and s.token_hash = $2`,
@@ -170,9 +171,9 @@ async function balanceRequest(payload) {
   if (!result.rowCount) return response("INVALID_TOKEN", null);
   const player = result.rows[0];
   if (!player.is_active || player.is_expired) return response("TOKEN_EXPIRED", player);
-  const balance = safeBalance(player.balance);
+  const balance = safeBalance(player.balance, player.balance_minor);
   if (balance === null) return response("ERROR", null, { message: "Balance exceeds supported range" });
-  return response("OK", { balance });
+  return response("OK", player);
 }
 
 async function debitRequest(payload, rawBody) {
@@ -192,7 +193,7 @@ async function debitRequest(payload, rawBody) {
     if (player.is_expired || !player.is_active) return response("TOKEN_EXPIRED", player);
 
     const prior = await priorTransaction(client, fields);
-    if (prior.rowCount) return duplicateResult(prior.rows[0], player.id, fields, player.balance, "DEBIT");
+    if (prior.rowCount) return duplicateResult(prior.rows[0], player.id, fields, player, "DEBIT");
     const rolledBackFirst = await client.query(
       `select id from public.skm_wallet_transactions
         where debit_transaction_id = $1 and kind = 'ROLLBACK' and status = 'TOMBSTONE'
@@ -201,18 +202,19 @@ async function debitRequest(payload, rawBody) {
     );
     if (rolledBackFirst.rowCount) return response("ERROR", player, { message: "Debit was rolled back before it arrived" });
 
-    const balance = safeBalance(player.balance);
+    const balance = safeBalance(player.balance, player.balance_minor);
     if (balance === null) return response("ERROR", null, { message: "Balance exceeds supported range" });
     if (balance < fields.amount) return response("INSUFFICIENT_FUNDS", player);
     const nextBalance = subtractMoney(balance, fields.amount);
-    await client.query("update public.profiles set balance = $2 where id = $1::uuid", [player.id, nextBalance]);
+    const wallet = splitGameBalance(nextBalance);
+    await client.query("update public.profiles set balance = $2, balance_minor = $3 where id = $1::uuid", [player.id, wallet.balance, wallet.balance_minor]);
     fields.userId = player.id;
     const transactionId = await recordTransaction(client, fields, "DEBIT", "APPLIED", nextBalance);
     if (stake > 0) {
       const wagering = await wageringTracker(client, player.id);
-      await wagering.addBet(stake, fields.transactionId);
+      await wagering.addBet(stake, fields.transactionId, 100);
     }
-    return response("OK", { balance: nextBalance }, { operator_transaction_id: transactionId });
+    return response("OK", wallet, { operator_transaction_id: transactionId });
   });
 }
 
@@ -225,10 +227,10 @@ async function creditRequest(payload, rawBody) {
     if (!identity.player) return response(identity.error, null);
     const player = identity.player;
     const prior = await priorTransaction(client, fields);
-    if (prior.rowCount) return duplicateResult(prior.rows[0], player.id, fields, player.balance, "CREDIT");
+    if (prior.rowCount) return duplicateResult(prior.rows[0], player.id, fields, player, "CREDIT");
 
     const debit = await client.query(
-      `select id, user_id, amount, status, reason, round_id, game_code, currency
+      `select id, user_id, amount, status, reason, round_id, game_code, currency, unit_scale
          from public.skm_wallet_transactions
         where transaction_id = $1 and kind = 'DEBIT' and user_id = $2::uuid
         for update`,
@@ -238,6 +240,7 @@ async function creditRequest(payload, rawBody) {
       return response("ERROR", player, { message: "Debit transaction is missing or already closed" });
     }
     const original = debit.rows[0];
+    if (original.unit_scale !== 100) return response("ERROR", player, { message: "Legacy game debit requires reconciliation" });
     if (original.round_id !== fields.roundId || original.game_code !== fields.gameCode || original.currency !== fields.currency ||
         (original.reason === "BET_HOLD" ? "BET_SETTLE" : "BANK_RETURN") !== fields.reason) {
       return response("ERROR", player, { message: "Settlement details do not match the debit" });
@@ -249,12 +252,13 @@ async function creditRequest(payload, rawBody) {
     );
     if (closed.rowCount) return response("ERROR", player, { message: "Debit transaction is already closed" });
 
-    const balance = safeBalance(player.balance);
+    const balance = safeBalance(player.balance, player.balance_minor);
     if (balance === null) return response("ERROR", null, { message: "Balance exceeds supported range" });
     let nextBalance;
     try { nextBalance = addMoney(balance, fields.amount); }
     catch { return response("ERROR", player, { message: "Balance exceeds supported range" }); }
-    await client.query("update public.profiles set balance = $2 where id = $1::uuid", [player.id, nextBalance]);
+    const wallet = splitGameBalance(nextBalance);
+    await client.query("update public.profiles set balance = $2, balance_minor = $3 where id = $1::uuid", [player.id, wallet.balance, wallet.balance_minor]);
     await client.query(
       `update public.skm_wallet_transactions set status = 'SETTLED' where id = $1::uuid`,
       [debit.rows[0].id],
@@ -264,7 +268,7 @@ async function creditRequest(payload, rawBody) {
     const wagering = await wageringTracker(client, player.id);
     await wagering.settleBet(fields.debitTransactionId);
     await wagering.resetIfEmpty(nextBalance, `credit:${fields.transactionId}`);
-    return response("OK", { balance: nextBalance }, { operator_transaction_id: transactionId });
+    return response("OK", wallet, { operator_transaction_id: transactionId });
   });
 }
 
@@ -277,7 +281,7 @@ async function rollbackRequest(payload, rawBody) {
     if (!identity.player) return response(identity.error, null);
     const player = identity.player;
     const prior = await priorTransaction(client, fields);
-    if (prior.rowCount) return duplicateResult(prior.rows[0], player.id, fields, player.balance, "ROLLBACK");
+    if (prior.rowCount) return duplicateResult(prior.rows[0], player.id, fields, player, "ROLLBACK");
 
     const closed = await client.query(
       `select id from public.skm_wallet_transactions
@@ -287,27 +291,28 @@ async function rollbackRequest(payload, rawBody) {
     if (closed.rowCount) return response("ERROR", player, { message: "Debit transaction is already closed" });
 
     const debit = await client.query(
-      `select id, user_id, amount, status, reason, round_id, game_code, currency
+      `select id, user_id, amount, status, reason, round_id, game_code, currency, unit_scale
          from public.skm_wallet_transactions
         where transaction_id = $1 and kind = 'DEBIT'
         for update`,
       [fields.debitTransactionId],
     );
     if (debit.rowCount && (
-      debit.rows[0].user_id !== player.id || debit.rows[0].status !== "APPLIED" ||
+      debit.rows[0].user_id !== player.id || debit.rows[0].status !== "APPLIED" || debit.rows[0].unit_scale !== 100 ||
       moneyNumber(debit.rows[0].amount) !== fields.amount || debit.rows[0].reason !== fields.reason ||
       debit.rows[0].round_id !== fields.roundId || debit.rows[0].game_code !== fields.gameCode || debit.rows[0].currency !== fields.currency
     )) {
       return response("ERROR", player, { message: "Debit transaction cannot be rolled back" });
     }
 
-    let nextBalance = safeBalance(player.balance);
+    let nextBalance = safeBalance(player.balance, player.balance_minor);
     if (nextBalance === null) return response("ERROR", null, { message: "Balance exceeds supported range" });
     let status = "TOMBSTONE";
     if (debit.rowCount) {
       try { nextBalance = addMoney(nextBalance, fields.amount); }
       catch { return response("ERROR", player, { message: "Balance exceeds supported range" }); }
-      await client.query("update public.profiles set balance = $2 where id = $1::uuid", [player.id, nextBalance]);
+      const wallet = splitGameBalance(nextBalance);
+      await client.query("update public.profiles set balance = $2, balance_minor = $3 where id = $1::uuid", [player.id, wallet.balance, wallet.balance_minor]);
       await client.query(
         "update public.skm_wallet_transactions set status = 'ROLLED_BACK' where id = $1::uuid",
         [debit.rows[0].id],
@@ -319,7 +324,7 @@ async function rollbackRequest(payload, rawBody) {
     const wagering = await wageringTracker(client, player.id);
     await wagering.cancelBet(fields.debitTransactionId);
     await wagering.resetIfEmpty(nextBalance, `rollback:${fields.transactionId}`);
-    return response("OK", { balance: nextBalance }, { operator_transaction_id: transactionId });
+    return response("OK", splitGameBalance(nextBalance), { operator_transaction_id: transactionId });
   });
 }
 

@@ -40,6 +40,7 @@ before(async () => {
   await migration("001_app_schema.sql");
   await migration("005_skm_seamless_wallet.sql");
   await migration("008_deposit_wagering.sql");
+  await migration("012_game_minor_units.sql");
 });
 beforeEach(async () => {
   await db.exec("truncate public.wallet_wagering_events, public.skm_wallet_transactions, public.skm_game_sessions, public.deposits, public.withdrawals, public.profiles restart identity cascade");
@@ -56,7 +57,12 @@ function deposit(user, amount, id = randomUUID()) {
   return applyVerifiedDeposit({ userId: user.userId, orderId: id, transactionId: id, providerTransactionId: id, depositToken: "", serviceType: "kbzpay", amount });
 }
 async function callback(route, payload) {
-  return processSkmWalletCallback(route, payload, JSON.stringify(payload));
+  // Business fixtures below use app kyat; the provider sends minor units.
+  const wire = { ...payload,
+    ...(typeof payload.amount === "number" ? { amount: payload.amount * 100 } : {}),
+    ...(typeof payload.stake === "number" ? { stake: payload.stake * 100 } : {}),
+  };
+  return processSkmWalletCallback(route, wire, JSON.stringify(wire));
 }
 async function bet(user, amount, { gameCode = "goldencentury", stake = amount, reason = "BET_HOLD" } = {}) {
   const payload = { player_id: user.player_id, token: user.token, currency: "MMK", round_id: randomUUID(), transaction_id: randomUUID(), game_code: gameCode, reason, amount, stake };
@@ -210,10 +216,12 @@ test("migration is repeatable and historical balances are not retroactively lock
     assert.equal(await balance(user), 1000);
     await migration("008_deposit_wagering.sql");
     await migration("008_deposit_wagering.sql");
+    await migration("012_game_minor_units.sql");
     assert.equal(await remaining(user), 0n);
     assert.equal((await withdraw(user, 1000)).state, "reserved");
   } finally {
     await migration("008_deposit_wagering.sql");
+    await migration("012_game_minor_units.sql");
   }
 });
 

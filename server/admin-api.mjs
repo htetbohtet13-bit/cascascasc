@@ -192,7 +192,7 @@ async function overview(pool) {
     `select
        (select count(*) from public.profiles) as users,
        (select count(*) from public.profiles where created_at >= date_trunc('day', now())) as new_users_today,
-       (select coalesce(sum(balance), 0) from public.profiles) as total_balance,
+       (select coalesce(sum(balance + balance_minor::numeric / 100), 0) from public.profiles) as total_balance,
        (select count(*) from public.slot_bets) as bet_count,
        (select coalesce(sum(bet), 0) from public.slot_bets) as bet_total,
        (select coalesce(sum(win), 0) from public.slot_bets) as win_total,
@@ -234,7 +234,7 @@ async function users(pool, url) {
   const pattern = `%${search}%`;
   const [list, count] = await Promise.all([
     pool.query(
-      `select id, phone, balance, created_at
+      `select id, phone, balance + balance_minor::numeric / 100 as balance, created_at
          from public.profiles
         where $1 = '' or phone ilike $2 or id::text ilike $2
         order by created_at desc limit $3 offset $4`,
@@ -303,7 +303,7 @@ async function walletList(pool, url, kind) {
 async function userDetails(pool, userId) {
   if (!UUID_RE.test(userId)) return { status: 400, body: { error: "Invalid user id" } };
   const [profile, bets, deposits, withdrawals] = await Promise.all([
-    pool.query("select id, phone, balance, created_at from public.profiles where id = $1::uuid", [userId]),
+    pool.query("select id, phone, balance + balance_minor::numeric / 100 as balance, created_at from public.profiles where id = $1::uuid", [userId]),
     pool.query("select bet_uid, round_id, bet, win, changemoney, balance_after, game_id, room_id, created_at from public.slot_bets where user_id = $1::uuid order by created_at desc limit 25", [userId]),
     pool.query("select order_id, service_type, amount, transaction_id, status, message, created_at, completed_at from public.deposits where user_id = $1::uuid order by created_at desc limit 25", [userId]),
     pool.query("select order_id, service_type, amount, payout_phone, provider_txn_id, status, message, created_at, completed_at from public.withdrawals where user_id = $1::uuid order by created_at desc limit 25", [userId]),

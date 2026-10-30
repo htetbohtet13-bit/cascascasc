@@ -266,7 +266,7 @@ export async function completeWithdraw({ userId, orderId, providerTransactionId 
 
 export async function getProfile(userId) {
   const result = await getPool().query(
-    "select phone, balance, created_at from public.profiles where id = $1::uuid",
+    "select phone, balance, balance_minor, created_at from public.profiles where id = $1::uuid",
     [userId],
   );
   const profile = result.rows[0];

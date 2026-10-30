@@ -11,6 +11,7 @@ type GameFilter = "popular" | "cards" | "slots" | "buffalo" | "all";
 type Profile = {
   phone: string;
   balance: number;
+  balance_minor?: number;
   created_at: string;
 };
 type Session = { user: { id: string; name?: string; username?: string } };
@@ -58,8 +59,8 @@ function gameLaunchOptions(game: Game): GameLaunchOption[] {
       id: `pool-${pool.pool_id}`,
       tableId: pool.pool_id,
       name: pool.name,
-      minBet: pool.limits?.min_bet,
-      maxBet: pool.limits?.max_bet,
+      minBet: pool.limits?.min_bet == null ? undefined : pool.limits.min_bet / 100,
+      maxBet: pool.limits?.max_bet == null ? undefined : pool.limits.max_bet / 100,
     }));
   const tables = (game.tables ?? [])
     .filter((table) => table.currency === "MMK")
@@ -67,8 +68,8 @@ function gameLaunchOptions(game: Game): GameLaunchOption[] {
       id: `table-${table.table_id}`,
       tableId: table.table_id,
       name: table.name,
-      minBet: table.limits?.min_bet,
-      maxBet: table.limits?.max_bet,
+      minBet: table.limits?.min_bet == null ? undefined : table.limits.min_bet / 100,
+      maxBet: table.limits?.max_bet == null ? undefined : table.limits.max_bet / 100,
     }));
   return [...pools, ...tables]
     .sort((a, b) => (a.minBet ?? Number.MAX_SAFE_INTEGER) - (b.minBet ?? Number.MAX_SAFE_INTEGER))
@@ -392,7 +393,7 @@ export default function App() {
     profile?.phone ??
     session?.user.name ??
     "—";
-  const balance = profile?.balance ?? 0;
+  const balance = (profile?.balance ?? 0) + (profile?.balance_minor ?? 0) / 100;
   const visibleGames = games
     .filter((game) => {
       const isBuffalo = game.name.toLowerCase().includes("buffalo");
