@@ -4,7 +4,7 @@ import gameLoginHandler from "../api/game-login.js";
 import walletConfigHandler from "../api/wallet/config.js";
 import walletDepositHandler from "../api/wallet/deposit.js";
 import walletWithdrawHandler from "../api/wallet/withdraw.js";
-import { handleWalletProxy } from "./wallet-proxy.mjs";
+import walletHistoryHandler from "../api/wallet/history.js";
 import { readJsonBody, sendBodyError } from "./request-body.mjs";
 import meHandler from "../api/me.js";
 import betsHandler from "../api/profile/bets.js";
@@ -67,12 +67,8 @@ const server = http.createServer(async (req, rawRes) => {
       if (path === "/api/wallet/config") return walletConfigHandler(req, res);
       if (path === "/api/wallet/deposit") return walletDepositHandler(req, res);
       if (path === "/api/wallet/withdraw") return walletWithdrawHandler(req, res);
-      const functionName = path === "/api/wallet/history" ? "wallet-history" : null;
-      if (!functionName) return res.status(404).json({ error: "Not found" });
-      if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
-      const result = await handleWalletProxy({ req, functionName, method: req.method, payload: req.body });
-      for (const [name, value] of Object.entries(result.headers ?? {})) res.setHeader(name, value);
-      return res.status(result.status).json(result.body);
+      if (path === "/api/wallet/history") return walletHistoryHandler(req, res);
+      return res.status(404).json({ error: "Not found" });
     }
     return res.status(404).json({ error: "Not found" });
   } catch (error) {

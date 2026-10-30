@@ -34,6 +34,7 @@ const { createSkmGameSession, processSkmWalletCallback } = await import("../serv
 const { handleWalletProxy } = await import("../server/wallet-proxy.mjs");
 const { default: withdrawHandler } = await import("../api/wallet/withdraw.js");
 const { default: depositHandler, config: depositHandlerConfig } = await import("../api/wallet/deposit.js");
+const { default: historyHandler } = await import("../api/wallet/history.js");
 const { handleSkmWallet } = await import("../api/_skm-wallet.js");
 
 async function migration(name) {
@@ -105,6 +106,49 @@ test("bounded arithmetic rejects malformed values and never rounds an overflow",
   for (const value of [true, null, "1e3", "01", "1.5", -1, Number.MAX_SAFE_INTEGER + 1]) assert.throws(() => money(value));
   assert.throws(() => addMoney(MAX_MONEY, 1));
   assert.throws(() => subtractMoney(0, 1));
+});
+
+test("the deployed wallet history handler returns only the session player's deposits and withdrawals", async () => {
+  const user = await player(1000); await deposit(user, 100);
+  const bet = event(user, 100); await callback("debit", bet); await callback("credit", credit(bet, 100));
+  const orderId = randomUUID(); await reserve(user, 50, orderId);
+  await recordWithdrawTransfer({ userId: user.userId, orderId, providerTransactionId: "history-test-bank-reference" });
+  await completeWithdraw({ userId: user.userId, orderId, providerTransactionId: "history-test-bank-reference" });
+  const other = await player(); await deposit(other, 777);
+  activeUserId = user.userId;
+  const before = await balance(user); const res = response();
+  await historyHandler({ method: "GET", url: `/api/wallet/history?user_id=${other.userId}`, body: { user_id: other.userId }, headers: {} }, res);
+  assert.equal(res.statusCode, 200); assert.equal(res.headers["cache-control"], "private, no-store");
+  assert.equal(res.body.history.length, 2);
+  assert.ok(res.body.history.some((row) => row.kind === "deposit" && Number(row.amount) === 100 && row.status === "verified"));
+  assert.ok(res.body.history.some((row) => row.kind === "withdraw" && Number(row.amount) === 50 && row.status === "paid"));
+  assert.ok(!JSON.stringify(res.body).includes(other.userId));
+  assert.ok(!res.body.history.some((row) => Number(row.amount) === 777));
+  assert.equal(await balance(user), before);
+  const deployment = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
+  assert.equal(deployment.functions["api/wallet/history.js"].includeFiles, "server/**");
+});
+
+test("wallet history supports empty accounts and rejects unauthenticated or unsafe methods without writes", async () => {
+  await player(); const empty = response(); await historyHandler({ method: "GET" }, empty);
+  assert.equal(empty.statusCode, 200); assert.deepEqual(empty.body.history, []);
+  activeUserId = undefined;
+  const anonymous = response(); await historyHandler({ method: "GET" }, anonymous); assert.equal(anonymous.statusCode, 401);
+  queryLog = [];
+  for (const method of ["POST", "PUT", "DELETE"]) {
+    const res = response(); await historyHandler({ method }, res); assert.equal(res.statusCode, 405);
+    assert.equal(res.headers["cache-control"], "private, no-store");
+  }
+  assert.equal(queryLog.length, 0);
+});
+
+test("wallet history errors remain JSON and do not expose database details", async (t) => {
+  await player(); const logs = [];
+  t.mock.method(console, "error", (...args) => logs.push(args));
+  queryFault = (sql) => { if (sql.includes("'deposit'::text as kind")) throw Object.assign(new Error("private-database-detail"), { code: "private-database-value" }); };
+  const res = response(); await historyHandler({ method: "GET" }, res);
+  assert.equal(res.statusCode, 500); assert.match(res.body.error, /[\u1000-\u109f]/);
+  assert.ok(!JSON.stringify([res.body, logs]).includes("private-database"));
 });
 
 test("deposit overflow leaves the wallet, receipt and wagering event unchanged", async () => {

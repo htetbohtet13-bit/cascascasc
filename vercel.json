@@ -39,6 +39,9 @@
     "api/wallet/config.js": {
       "includeFiles": "server/**"
     },
+    "api/wallet/history.js": {
+      "includeFiles": "server/**"
+    },
     "api/wallet/deposit.js": {
       "includeFiles": "server/**",
       "maxDuration": 120
