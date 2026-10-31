@@ -4541,29 +4541,32 @@
 .bonus-page-status button { padding: 8px 18px; border: 1px solid #d6b773; border-radius: 9px; background: #fff7e6; color: #795816; font: inherit; cursor: pointer; }
 .welcome-bonus-overlay { position: fixed; z-index: 160; inset: 0; display: flex; align-items: center; justify-content: center; padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom)); background: #211b166b; backdrop-filter: blur(3px); overflow-y: auto; }
 .welcome-bonus-dialog { width: 100%; max-width: 370px; max-height: 100%; overflow-y: auto; border-radius: 20px; box-shadow: 0 18px 60px #21170e26; animation: payment-result-appear .2s ease-out; }
-.welcome-bonus-card { position: relative; padding: 26px 24px 16px; border: 1px solid #e9dfce; border-radius: 20px; background: #fffdf8; color: #51391c; text-align: center; overflow: hidden; }
+.welcome-bonus-card { position: relative; padding: 24px 24px 16px; border: 1px solid #e4c782; border-radius: 20px; background: linear-gradient(180deg, #fff3d2, #fffdf8 40%); color: #51391c; text-align: center; overflow: hidden; }
 .welcome-bonus-close { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #9b8d77; cursor: pointer; }
 .welcome-bonus-close:hover { background: #f5efe3; }
-.welcome-bonus-heading { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8px 18px 18px; }
-.welcome-bonus-gift { display: grid; place-items: center; width: 30px; height: 30px; color: #b08432; }
-.welcome-bonus-gift svg { width: 27px; height: 27px; }
-.welcome-bonus-tag { color: #94836a; font-size: 11px; line-height: 1.8; }
+.welcome-bonus-heading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; margin: 0 18px 14px; }
+.welcome-bonus-gift { display: grid; place-items: center; width: 72px; height: 60px; background: radial-gradient(ellipse, #ffe5a0, #fff0c75c 60%, transparent 75%); font-size: 50px; line-height: 1; }
+.welcome-bonus-tag { padding: 3px 11px; border: 1px solid #e5ce96; border-radius: 20px; background: #fff6df; color: #8f6d28; font-size: 10px; line-height: 1.6; }
 .welcome-bonus-card h1 { margin: 0; color: #58442c; font-size: 18px; font-weight: 700; line-height: 1.7; }
-.welcome-bonus-card h1 > span { display: block; margin-top: 7px; color: #88601d; font-size: 54px; line-height: 1.2; font-weight: 800; letter-spacing: -2px; }
+.welcome-bonus-card h1 > span { display: block; width: fit-content; margin: 7px auto 0; padding: 0 12px 4px; border-bottom: 4px solid #f2d17b; color: #a36b0d; font-size: 56px; line-height: 1.2; font-weight: 850; letter-spacing: -2px; }
 .welcome-bonus-card h1 small { font-size: 13px; font-weight: 600; letter-spacing: 0; }
 .welcome-bonus-sub { max-width: 250px; margin: 9px auto 22px; color: #8e7e65; font-size: 11px; line-height: 1.9; }
 .welcome-bonus-card .bonus-preview { padding: 3px 14px; border: 0; border-radius: 12px; background: #f8f3e9; text-align: left; }
 .welcome-bonus-card .bonus-preview > div { padding: 11px 0; }
 .welcome-bonus-card .bonus-preview > div + div { border-color: #e9dfce; }
+.welcome-bonus-card .bonus-preview > div:nth-child(2) { margin: 0 -7px; padding: 10px 7px; border-top: 0; border-radius: 8px; background: #ffedba; }
+.welcome-bonus-card .bonus-preview > div:nth-child(2) dt { color: #805914; font-weight: 750; }
+.welcome-bonus-card .bonus-preview > div:nth-child(2) dd { color: #995f06; font-size: 18px; font-weight: 850; }
 .welcome-bonus-card .bonus-preview dt { font-size: 11px; }
 .welcome-bonus-card .bonus-preview dd { font-size: 14px; }
 .welcome-bonus-card .bonus-preview > div:last-child dd { font-size: 19px; }
-.welcome-bonus-take { display: block; width: 100%; min-height: 48px; margin-top: 20px; padding: 11px 14px; border: 1px solid #d9b358; border-radius: 11px; background: linear-gradient(110deg, #f3d588, #e9c266); color: #573e15; font: inherit; font-size: 14px; font-weight: 750; cursor: pointer; }
+.welcome-bonus-take { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 48px; margin-top: 20px; padding: 11px 14px; border: 1px solid #d6a335; border-radius: 11px; background: linear-gradient(110deg, #ffe29a, #eabb4d); box-shadow: 0 4px 12px #ac79151a, inset 0 1px 0 #fff2c9; color: #573e15; font: inherit; font-size: 14px; font-weight: 750; cursor: pointer; }
+.welcome-bonus-take > span { font-size: 19px; line-height: 1; }
 .welcome-bonus-take:hover { background: #edca76; }
 .welcome-bonus-later { display: block; min-height: 36px; margin: 7px auto 0; padding: 5px 18px; border: 0; background: transparent; color: #95856c; font: inherit; font-size: 11px; cursor: pointer; }
 .welcome-bonus-unavailable { margin: 17px 0 0; padding: 10px; border-radius: 10px; background: #f1eadc; color: #8b7a5f; font-size: 12px; line-height: 1.9; }
 .welcome-bonus-card button:focus-visible { outline: 2px solid #9e7120; outline-offset: 3px; }
-@media (max-height: 600px) { .welcome-bonus-card { padding: 18px 20px 10px; } .welcome-bonus-heading { margin-bottom: 10px; } .welcome-bonus-card h1 > span { font-size: 46px; } .welcome-bonus-sub { margin-bottom: 15px; } .welcome-bonus-take { margin-top: 15px; } }
+@media (max-height: 600px) { .welcome-bonus-card { padding: 16px 20px 10px; } .welcome-bonus-heading { gap: 5px; margin-bottom: 10px; } .welcome-bonus-gift { width: 58px; height: 46px; font-size: 42px; } .welcome-bonus-card h1 > span { font-size: 46px; padding-bottom: 2px; border-bottom-width: 3px; } .welcome-bonus-sub { margin-bottom: 12px; } .welcome-bonus-take { margin-top: 15px; } }
 @media (prefers-reduced-motion: reduce) { .welcome-bonus-dialog { animation: none; } }
 .wallet-history-amount > small { color: #8a641c; font-size: 10px; }
 .payment-result-details { margin: 0 20px; }

@@ -22,14 +22,12 @@ export default function BonusOffer({ onTake, onClose, unavailable = false, guest
   return (
     <section className="welcome-bonus-card" aria-labelledby={titleId}>
       {onClose ? <button type="button" className="welcome-bonus-close" onClick={onClose} aria-label="ပိတ်မည်"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button> : null}
-      <div className="welcome-bonus-heading"><div className="welcome-bonus-gift" aria-hidden="true">
-        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 22h30v19H9zM6 14h36v8H6zM24 14v27" /><path d="M24 14h-6a5 5 0 1 1 4.5-7.2L24 14Zm0 0h6a5 5 0 1 0-4.5-7.2L24 14Z" /></svg>
-      </div><span className="welcome-bonus-tag">အကောင့်အသစ်အတွက်</span></div>
+      <div className="welcome-bonus-heading"><div className="welcome-bonus-gift" aria-hidden="true">🎁</div><span className="welcome-bonus-tag">အကောင့်အသစ်အတွက်</span></div>
       <h1 id={titleId}>ကြိုဆိုဘောနပ်စ်<span>5,000 <small>ကျပ်</small></span></h1>
       <p className="welcome-bonus-sub">ပထမဆုံး ၅,၀၀၀ ကျပ်နှင့်အထက် ငွေသွင်းပြီး ရယူပါ</p>
       <BonusPreview amount={5000} />
       {unavailable ? <p className="welcome-bonus-unavailable" role="status">ဤအကောင့်အတွက် ကြိုဆိုဘောနပ်စ် ရယူခွင့်မရှိတော့ပါ။</p>
-        : <button type="button" className="welcome-bonus-take" onClick={onTake}>{guest ? "အကောင့်ဖွင့်ပြီး ရယူမည်" : "ဘောနပ်စ်ယူမည်"}</button>}
+        : <button type="button" className="welcome-bonus-take" onClick={onTake}><span aria-hidden="true">🎁</span>{guest ? "အကောင့်ဖွင့်ပြီး ရယူမည်" : "ဘောနပ်စ်ယူမည်"}</button>}
       {onClose ? <button type="button" className="welcome-bonus-later" onClick={onClose}>နောက်မှ</button> : null}
     </section>
   );

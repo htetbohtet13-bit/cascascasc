@@ -154,6 +154,7 @@ test("the simplified offer shows the fixed bonus and example total with working 
   let taken = 0; let closed = 0;
   const tree = offerExports.default({ onTake: () => taken++, onClose: () => closed++ });
   const content = text(tree);
+  assert.ok(content.includes("🎁"));
   assert.ok(content.includes("5,000")); assert.ok(content.includes("+5,000")); assert.ok(content.includes("10,000"));
   assert.ok(!content.includes("အကောင့်တစ်ခုလျှင် တစ်ကြိမ်သာ။ သွင်းငွေ + ဘောနပ်စ်")); assert.ok(!content.includes("100%"));
   find(tree, (node) => node.type === "button" && text(node).includes("ဘောနပ်စ်ယူမည်")).props.onClick(); assert.equal(taken, 1);
