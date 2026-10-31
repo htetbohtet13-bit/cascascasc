@@ -135,12 +135,12 @@ test("a guest uses the bonus page to create an account before accessing deposits
 const offerExports = {};
 const jsx = (type, props) => typeof type === "function" ? type(props) : ({ type, props });
 runInNewContext(offerCode, { exports: offerExports, require: () => ({ jsx, jsxs: jsx }) });
-test("the offer accurately describes a fixed 5,000 bonus, 30x wagering, and a 10,000 example total", () => {
+test("the simplified offer shows the fixed bonus and example total with working take and dismiss buttons", () => {
   let taken = 0; let closed = 0;
   const tree = offerExports.default({ onTake: () => taken++, onClose: () => closed++ });
   const content = text(tree);
   assert.ok(content.includes("5,000")); assert.ok(content.includes("+5,000")); assert.ok(content.includes("10,000"));
-  assert.ok(content.includes("အဆ ၃၀")); assert.ok(!content.includes("100%"));
+  assert.ok(!content.includes("အကောင့်တစ်ခုလျှင် တစ်ကြိမ်သာ။ သွင်းငွေ + ဘောနပ်စ်")); assert.ok(!content.includes("100%"));
   find(tree, (node) => node.type === "button" && text(node).includes("ဘောနပ်စ်ယူမည်")).props.onClick(); assert.equal(taken, 1);
   find(tree, (node) => node.type === "button" && text(node) === "နောက်မှ").props.onClick(); assert.equal(closed, 1);
   const used = offerExports.default({ onTake() {}, unavailable: true });
