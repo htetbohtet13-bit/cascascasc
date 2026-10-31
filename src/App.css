@@ -4623,6 +4623,14 @@
 .admin-status.settled { background: #e9f4ec; color: #267347; }
 .admin-status.cancelled { background: #f1eeea; color: #877d70; }
 .admin-report-note { margin: 10px 0 0; color: #8c7d67; font-size: 10px; line-height: 1.7; }
+.auth-signup-offer { display: flex; align-items: center; gap: 12px; margin: 15px 0 22px; padding: 13px 14px; border: 1px solid #e7cd8e; border-radius: 13px; background: linear-gradient(115deg, #fff1c9, #fff9ec); }
+.auth-offer-gift { flex-shrink: 0; font-size: 28px; line-height: 1; }
+.auth-signup-offer p { margin: 0; color: #8c7040; font-size: 11px; line-height: 1.9; }
+.auth-signup-offer strong { display: block; color: #775012; font-size: 15px; font-weight: 800; line-height: 1.9; }
+.auth-signup-offer small { display: block; margin-top: 3px; color: #967e54; font-size: 10px; line-height: 1.9; }
+.guest-auth-actions { display: flex; align-items: center; justify-self: end; gap: 8px; grid-column: 2 / -1; }
+.guest-login-icon { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--ui-line); border-radius: 10px; background: var(--ui-surface); color: #8e7955; cursor: pointer; }
+.guest-login-icon:focus-visible { outline: 2px solid #ad822d; outline-offset: 2px; }
 .admin-player-count { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 5px 10px; border: 1px solid #e5d8bd; border-radius: 8px; background: #fffaf0; color: #785b2d; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
 .admin-player-count svg { color: #a18a62; }
 .admin-player-count-form { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 230px; }

@@ -107,6 +107,13 @@ test("existing signed-in accounts do not get a signup popup; ineligible accounts
   await eligible.nav("bonuses"); assert.equal(eligible.offer().props.unavailable, false);
   const used = appHarness({ eligible: false }); await used.signup(); assert.equal(used.popup(), null);
   await used.nav("bonuses"); assert.equal(used.offer().props.unavailable, true); assert.equal(used.wallet(), null);
+  const returning = appHarness(); await returning.settle();
+  find(returning.render(), (node) => node.type === "button" && node.props.className === "auth-close").props.onClick();
+  find(returning.render(), (node) => node.type === "button" && node.props.className === "guest-login-icon").props.onClick();
+  await returning.settle();
+  assert.ok(text(returning.render()).includes("အကောင့်ဝင်ပါ"));
+  await returning.signup();
+  assert.ok(returning.calls.includes("signin")); assert.equal(returning.popup(), null);
 });
 
 test("eligibility is refreshed after leaving deposits so an awarded bonus is no longer offered", async () => {
@@ -130,6 +137,11 @@ test("a guest uses the bonus page to create an account before accessing deposits
   const app = appHarness(); await app.settle(); await app.nav("bonuses");
   assert.equal(app.offer().props.guest, true); app.offer().props.onTake(); await app.settle();
   assert.equal(app.wallet(), null); assert.ok(find(app.render(), (node) => node.type === "form" && node.props.className === "auth-form"));
+  const dialog = find(app.render(), (node) => node.props?.className === "auth-box");
+  assert.ok(text(dialog).includes("🎁")); assert.ok(text(dialog).includes("စုစုပေါင်း 10,000 ကျပ် ရယူပါ"));
+  assert.ok(text(dialog).includes("ငွေသွင်း 5,000 ကျပ် + ဘောနပ်စ် 5,000 ကျပ်"));
+  assert.ok(!text(dialog).includes("အကောင့်ရှိပြီးသားလား?"));
+  assert.equal(find(dialog, (node) => node.props?.className === "auth-switch-line"), null);
 });
 
 const offerExports = {};

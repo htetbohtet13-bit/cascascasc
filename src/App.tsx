@@ -386,18 +386,21 @@ export default function App() {
       </div>
       <section className="auth-box" role="dialog" aria-modal="true" aria-labelledby="auth-title">
         <h1 id="auth-title">{signingIn ? "အကောင့်ဝင်ပါ" : "အကောင့်အသစ်ဖွင့်ပါ"}</h1>
-        <p className="auth-switch-line">
-          {signingIn ? "အကောင့်မရှိသေးဘူးလား?" : "အကောင့်ရှိပြီးသားလား?"}{" "}
+        {signingIn ? <p className="auth-switch-line">
+          အကောင့်မရှိသေးဘူးလား?{" "}
           <button
             type="button"
             onClick={() => {
-              setMode(signingIn ? "signup" : "signin");
+              setMode("signup");
               setError("");
             }}
           >
-            {signingIn ? "အကောင့်ဖွင့်ပါ" : "ဝင်မည်"}
+            အကောင့်ဖွင့်ပါ
           </button>
-        </p>
+        </p> : <div className="auth-signup-offer">
+          <span className="auth-offer-gift" aria-hidden="true">🎁</span>
+          <div><p>အကောင့်ဖွင့်ပြီး <strong>စုစုပေါင်း 10,000 ကျပ် ရယူပါ</strong></p><small>ငွေသွင်း 5,000 ကျပ် + ဘောနပ်စ် 5,000 ကျပ်</small></div>
+        </div>}
 
         <form className="auth-form" onSubmit={onSubmit}>
           <label>
@@ -487,9 +490,14 @@ export default function App() {
               </div>
             ) : null}
             {!session ? (
+              <div className="guest-auth-actions">
+              <button type="button" className="guest-login-icon" onClick={() => openAuth("signin")} aria-label="အကောင့်ဝင်ရန်" title="အကောင့်ဝင်ရန်">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 4h5v16h-5M3 12h12m-4-4 4 4-4 4" /></svg>
+              </button>
               <button type="button" className="guest-sign-in" onClick={() => openAuth("signup")}>
                 အကောင့်ဖွင့်
               </button>
+              </div>
             ) : null}
           </header>
 
