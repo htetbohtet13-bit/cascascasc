@@ -4623,6 +4623,40 @@
 .admin-status.settled { background: #e9f4ec; color: #267347; }
 .admin-status.cancelled { background: #f1eeea; color: #877d70; }
 .admin-report-note { margin: 10px 0 0; color: #8c7d67; font-size: 10px; line-height: 1.7; }
+/* Keep the receipt details, six digits and confirm action in one viewport. */
+.deposit-scroll.pay-page .deposit-pay-white,
+.wallet-center.deposit-fullscreen .deposit-pay-white { display: flex; flex-direction: column; height: 100%; min-height: 0; padding: max(6px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom)); }
+.deposit-pay-white-bar { margin-bottom: 4px; flex-shrink: 0; }
+.deposit-pay-white-bar button { min-height: 32px; padding: 2px 0; color: var(--ui-muted); font-size: 12px; }
+.deposit-scroll.pay-page .deposit-white-card { display: flex; flex: 1; flex-direction: column; min-height: 0; padding: 0 10px 8px; border-radius: 14px; overflow: visible; }
+.wallet-center.deposit-fullscreen .deposit-white-card { padding: 0; border-radius: 0; }
+.deposit-white-card > * { flex-shrink: 0; }
+.deposit-white-head { gap: 8px; padding: 7px 0; }
+.deposit-white-head > div:first-child { gap: 8px; }
+.deposit-white-head img { width: 30px; height: 30px; border-radius: 7px; }
+.deposit-white-head strong { font-size: 18px; }
+.deposit-white-timer { gap: 5px; font-size: 18px; }
+.deposit-white-row { gap: 6px; padding: 5px 0; }
+.deposit-white-row > div { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.deposit-white-row em { flex-shrink: 0; font-size: 11px; line-height: 1.6; }
+.deposit-white-row strong { max-width: 65%; margin-top: 0; font-size: 14px; line-height: 1.6; text-align: right; overflow-wrap: anywhere; }
+.deposit-white-row button { width: 32px; height: 32px; padding: 0; }
+.deposit-white-hint { margin: 7px 0 0; font-size: 12px; line-height: 1.7; }
+.deposit-white-otp { margin-top: 6px; padding: 4px; border-radius: 11px; }
+.deposit-white-otp input { display: block; height: 48px; font-size: 32px !important; letter-spacing: .22em; }
+.deposit-white-instruction { flex: 1 1 140px; min-height: 0; max-height: 180px; margin-top: 6px; border-radius: 8px; }
+.deposit-white-instruction img { width: 100%; height: 100%; object-fit: contain; }
+.deposit-white-error { margin-top: 5px; font-size: 11px; line-height: 1.6; }
+.deposit-white-confirm { height: 44px; min-height: 44px; margin-top: 8px; font-size: 14px; border-radius: 10px; }
+@media (max-height: 560px) {
+  .deposit-white-head { padding: 4px 0; }
+  .deposit-white-head img { width: 28px; height: 28px; }
+  .deposit-white-row { padding: 3px 0; }
+  .deposit-white-hint { margin-top: 5px; font-size: 11px; }
+  .deposit-white-otp { margin-top: 4px; padding: 3px; }
+  .deposit-white-otp input { height: 42px; font-size: 28px !important; }
+  .deposit-white-confirm { margin-top: 6px; }
+}
 .auth-signup-offer { display: flex; align-items: center; gap: 12px; margin: 15px 0 22px; padding: 13px 14px; border: 1px solid #e7cd8e; border-radius: 13px; background: linear-gradient(115deg, #fff1c9, #fff9ec); }
 .auth-offer-gift { flex-shrink: 0; font-size: 28px; line-height: 1; }
 .auth-signup-offer p { margin: 0; color: #8c7040; font-size: 11px; line-height: 1.9; }

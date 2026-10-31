@@ -91,7 +91,6 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
   const [directing, setDirecting] = useState(false);
   const [directPhase, setDirectPhase] = useState(0);
   const [loadingMethods, setLoadingMethods] = useState(true);
-  const receiptInputRef = useRef<HTMLInputElement>(null);
   const directingTimer = useRef<number | null>(null);
   const submissionStarted = useRef(false);
   const [creditedBonus, setCreditedBonus] = useState(0);
@@ -136,12 +135,6 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
     const timer = window.setInterval(() => setTimeLeft((current) => Math.max(0, current - 1)), 1000);
     return () => window.clearInterval(timer);
   }, [step, timeLeft]);
-
-  useEffect(() => {
-    if (step !== 3 || directing) return;
-    const timer = window.setTimeout(() => receiptInputRef.current?.focus(), 280);
-    return () => window.clearTimeout(timer);
-  }, [step, directing]);
 
   useEffect(() => {
     return () => {
@@ -424,11 +417,10 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
                 </div>
               ))}
 
-              <p className="deposit-white-hint">ငွေလွှဲပြီးပါက လုပ်ငန်းစဉ် နောက်ဆုံးနံပါတ်6လုံးထည့်ပါ👇</p>
+              <p className="deposit-white-hint">ငွေလွှဲပြီးပါက နောက်ဆုံး ၆ လုံးထည့်ပါ</p>
 
               <div className={`deposit-white-otp${receiptDigits.length === 6 ? " done" : ""}`}>
                 <input
-                  ref={receiptInputRef}
                   value={receiptDigits}
                   onChange={(event) => {
                     setReceiptDigits(event.target.value.replace(/\D/g, "").slice(0, 6));
