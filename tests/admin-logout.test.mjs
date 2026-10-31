@@ -11,6 +11,10 @@ const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
 }).outputText;
 const moneyExports = {};
+const playerCountExports = {};
+runInNewContext(ts.transpileModule(await readFile(new URL("../src/lib/player-count.ts", import.meta.url), "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText, { exports: playerCountExports });
 runInNewContext(ts.transpileModule(await readFile(new URL("../src/lib/format-money.ts", import.meta.url), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, { exports: moneyExports });
@@ -55,6 +59,8 @@ function componentHarness(fetchResult, { authenticated = false } = {}) {
       if (name === "react") return react;
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
       if (name === "./lib/format-money") return moneyExports;
+      if (name === "./lib/player-count") return playerCountExports;
+      if (name === "./GamePlayerCount") return { default: () => null };
       throw new Error(`Unexpected component import: ${name}`);
     },
     fetch: async (...args) => {

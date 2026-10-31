@@ -14,7 +14,7 @@ async function migration(name) {
 before(async () => {
   for (const name of ["001_app_schema.sql", "002_phone_auth.sql", "005_skm_seamless_wallet.sql",
     "006_game_display_settings.sql", "007_game_hot_setting.sql", "008_deposit_wagering.sql",
-    "009_auth_security.sql", "010_money_constraints.sql", "011_runtime_role.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql"]) await migration(name);
+    "009_auth_security.sql", "010_money_constraints.sql", "011_runtime_role.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql", "014_game_player_ranges.sql"]) await migration(name);
 });
 after(async () => { await db.close(); });
 
@@ -50,6 +50,8 @@ test("runtime can perform required app writes, but cannot drop/create tables or 
     assert.equal((await depositBonusEligibility(db, userId)).eligible, true);
     await assert.rejects(() => db.query("update public.deposit_bonus_campaign set starts_at=now()"), (error) => error.code === "42501");
     await db.query("insert into public.auth_credentials(user_id,password_hash) values($1::uuid,'test-hash')", [userId]);
+    await db.query("insert into public.game_display_settings(game_code,players_online,players_online_max) values('roletest',100,500)");
+    assert.equal((await db.query("select players_online_max from public.game_display_settings where game_code='roletest'")).rows[0].players_online_max, 500);
     await db.query("insert into public.auth_rate_limits(scope,key_hash,attempts,expires_at) values('test',$1,1,now()+interval '1 minute')", ["a".repeat(64)]);
     await db.query("insert into public.wallet_wagering_events(user_id,kind,amount,source_id,state) values($1::uuid,'DEPOSIT',1000,'role-test','SETTLED')", [userId]);
     assert.equal((await db.query("select count(*)::int as count from public.wallet_wagering_events")).rows[0].count, 1);

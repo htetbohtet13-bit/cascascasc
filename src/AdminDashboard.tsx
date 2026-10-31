@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 import { formatMoney } from "./lib/format-money";
+import { playerCountLabel } from "./lib/player-count";
+import GamePlayerCount from "./GamePlayerCount";
 
 type Section = "overview" | "users" | "games" | "bets" | "deposits" | "withdrawals";
 type OverviewRange = "today" | "yesterday" | "week" | "month" | "all";
@@ -32,7 +34,7 @@ type ProviderPool = {
 type ProviderTable = { table_id: string; name: string; currency: string };
 type ProviderGame = {
   game_code: string; name: string; pools?: ProviderPool[]; tables?: ProviderTable[];
-  image_url?: string | null; players_online?: number | null; sort_order?: number; is_active?: boolean; is_hot?: boolean;
+  image_url?: string | null; players_online?: number | null; players_online_max?: number | null; sort_order?: number; is_active?: boolean; is_hot?: boolean;
 };
 type Payload = {
   summary?: Summary; latestBets?: BetRow[]; latestWithdrawals?: WalletRow[];
@@ -484,7 +486,7 @@ function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games:
     setSaveError("");
     setDraft({
       image_url: game.image_url ?? "",
-      players_online: game.players_online == null ? "" : String(game.players_online),
+      players_online: playerCountLabel(game.players_online, game.players_online_max),
       sort_order: String(game.sort_order ?? 0),
       is_active: isVisible(game),
     });
@@ -533,7 +535,7 @@ function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games:
             <tr>
               <td><div className="admin-game-cell">{game.image_url ? <img src={game.image_url} alt="" /> : <span>{game.name.slice(0, 1)}</span>}<strong>{game.name}</strong></div></td>
               <td>{game.game_code}</td><td>{pools.length}</td><td>{tables.length}</td>
-              <td>{game.players_online == null ? "—" : Number(game.players_online).toLocaleString()}</td>
+              <td><GamePlayerCount code={game.game_code} min={game.players_online} max={game.players_online_max} sortOrder={game.sort_order} disabled={!settingsConfigured || saving || editingCode !== ""} onSaved={onSaved} /></td>
               <td>{game.sort_order ?? "—"}</td><td><button
                 type="button"
                 className={`admin-game-visibility ${isVisible(game) ? "visible" : "hidden"}`}
@@ -560,8 +562,8 @@ function ProviderGames({ games, loading, settingsConfigured, onSaved }: { games:
                     <label className="admin-game-image-field">Game image URL (HTTPS)
                       <input type="url" value={draft.image_url} onChange={(event) => setDraft((current) => ({ ...current, image_url: event.target.value }))} placeholder="https://…" />
                     </label>
-                    <label>Active players
-                      <input type="number" min="0" step="1" value={draft.players_online} onChange={(event) => setDraft((current) => ({ ...current, players_online: event.target.value }))} placeholder="Leave blank to hide" />
+                    <label>Player count or range
+                      <input type="text" maxLength={32} value={draft.players_online} onChange={(event) => setDraft((current) => ({ ...current, players_online: event.target.value }))} placeholder="100 or 100-500; blank to hide" />
                     </label>
                     <label>Display order
                       <input type="number" min="0" max="1000000" step="1" value={draft.sort_order} onChange={(event) => setDraft((current) => ({ ...current, sort_order: event.target.value }))} required />

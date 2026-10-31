@@ -4623,4 +4623,12 @@
 .admin-status.settled { background: #e9f4ec; color: #267347; }
 .admin-status.cancelled { background: #f1eeea; color: #877d70; }
 .admin-report-note { margin: 10px 0 0; color: #8c7d67; font-size: 10px; line-height: 1.7; }
+.admin-player-count { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 5px 10px; border: 1px solid #e5d8bd; border-radius: 8px; background: #fffaf0; color: #785b2d; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.admin-player-count svg { color: #a18a62; }
+.admin-player-count-form { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 230px; }
+.admin-player-count-form input { width: 110px; min-height: 34px; padding: 6px 8px; border: 1px solid #d9bd7d; border-radius: 7px; background: #fffdf8; color: #4e3c20; font: inherit; font-size: 12px; }
+.admin-player-count-form button { min-height: 34px; padding: 5px 9px; border: 1px solid #e5d8bd; border-radius: 7px; background: #f8efdc; color: #785b2d; font: inherit; font-size: 11px; cursor: pointer; }
+.admin-player-count-form small { flex-basis: 100%; max-width: 240px; color: #b04937; line-height: 1.6; }
+.admin-player-count:disabled, .admin-player-count-form button:disabled { opacity: .5; cursor: wait; }
+.admin-player-count:focus-visible, .admin-player-count-form input:focus-visible, .admin-player-count-form button:focus-visible { outline: 2px solid #ad822d; outline-offset: 2px; }
 .profile-activity-game strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

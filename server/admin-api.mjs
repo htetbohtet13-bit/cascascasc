@@ -7,6 +7,7 @@ import { consumeRateLimit } from "./rate-limit.mjs";
 import { adminMfaConfig, adminSessionKey, claimAdminTotp, matchingAdminTotpStep } from "./admin-mfa.mjs";
 import { overviewWindow, readAdminOverview } from "./admin-overview.mjs";
 import { adminGameHistory, playerGameHistory } from "./game-history.mjs";
+import { parsePlayerCount } from "./player-count.mjs";
 
 const PAGE_SIZE = 50;
 const MAX_PAGE = 1_000_000;
@@ -91,11 +92,8 @@ async function saveGameSettings(body) {
     }
   }
 
-  const playersInput = body?.players_online;
-  const playersOnline = playersInput === "" || playersInput == null ? null : Number(playersInput);
-  if (playersOnline !== null && (!Number.isInteger(playersOnline) || playersOnline < 0 || playersOnline > 1_000_000_000)) {
-    return { status: 400, body: { error: "Player count must be a whole number from 0 to 1,000,000,000" } };
-  }
+  const players = parsePlayerCount(body?.players_online);
+  if (!players) return { status: 400, body: { error: "Enter a player count or range such as 100-500 (0 to 1,000,000,000)" } };
 
   const sortOrder = Number(body?.sort_order);
   if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 1_000_000) {
@@ -108,23 +106,46 @@ async function saveGameSettings(body) {
   try {
     await getPool().query(
       `insert into public.game_display_settings
-         (game_code, image_url, players_online, sort_order, is_active, updated_at)
-       values ($1, $2, $3, $4, $5, now())
+         (game_code, image_url, players_online, sort_order, is_active, players_online_max, updated_at)
+       values ($1, $2, $3, $4, $5, $6, now())
        on conflict (game_code) do update set
          image_url = excluded.image_url,
          players_online = excluded.players_online,
+         players_online_max = excluded.players_online_max,
          sort_order = excluded.sort_order,
          is_active = excluded.is_active,
          updated_at = now()`,
-      [gameCode, imageUrl, playersOnline, sortOrder, body.is_active],
+      [gameCode, imageUrl, players.min, sortOrder, body.is_active, players.max],
     );
   } catch (error) {
+    if (error?.code === "42703") return { status: 503, body: { error: "Run neon/014_game_player_ranges.sql in the Neon SQL Editor first" } };
     if (error?.code === "42P01") {
       return { status: 503, body: { error: "Run neon/006_game_display_settings.sql in the Neon SQL Editor first" } };
     }
     throw error;
   }
   return { status: 200, body: { ok: true, game_code: gameCode } };
+}
+
+async function setGamePlayers(body) {
+  const gameCode = typeof body?.game_code === "string" ? body.game_code.trim() : "";
+  if (!/^[a-z0-9]{1,80}$/.test(gameCode)) return { status: 400, body: { error: "Invalid provider game code" } };
+  const players = parsePlayerCount(body?.players_online);
+  if (!players) return { status: 400, body: { error: "Enter a player count or range such as 100-500 (0 to 1,000,000,000)" } };
+  const initialOrder = body?.sort_order ?? 0;
+  if (!Number.isInteger(initialOrder) || initialOrder < 0 || initialOrder > 1_000_000) return { status: 400, body: { error: "Invalid display order" } };
+  try {
+    await getPool().query(
+      `insert into public.game_display_settings (game_code, players_online, players_online_max, sort_order, updated_at)
+       values ($1, $2, $3, $4, now()) on conflict (game_code) do update set
+         players_online = excluded.players_online, players_online_max = excluded.players_online_max, updated_at = now()`,
+      [gameCode, players.min, players.max, initialOrder],
+    );
+  } catch (error) {
+    if (["42703", "42P01"].includes(error?.code)) return { status: 503, body: { error: "Run neon/014_game_player_ranges.sql in the Neon SQL Editor first" } };
+    throw error;
+  }
+  return { status: 200, body: { ok: true, game_code: gameCode, players_online: players.min, players_online_max: players.max } };
 }
 
 async function setGameVisibility(body) {
@@ -334,6 +355,7 @@ async function adminRequest(req) {
     if (action === "save_game_settings") return await saveGameSettings(req.body);
     if (action === "set_game_visibility") return await setGameVisibility(req.body);
     if (action === "set_game_hot") return await setGameHot(req.body);
+    if (action === "set_game_players") return await setGamePlayers(req.body);
     return { status: 400, body: { error: "Unknown admin action" } };
   }
   if (req.method !== "GET") return { status: 405, body: { error: "Method not allowed" } };
