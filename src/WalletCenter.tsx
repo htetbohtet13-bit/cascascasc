@@ -11,6 +11,7 @@ type Props = {
   defaultPhone: string;
   onClose: () => void;
   onBalance: (balance: number) => void;
+  initialDepositAmount?: number;
 };
 
 const TABS: { id: WalletTab; label: string }[] = [
@@ -77,7 +78,7 @@ function WalletHistory() {
   );
 }
 
-export default function WalletCenter({ initialTab, balance, defaultPhone, onClose, onBalance }: Props) {
+export default function WalletCenter({ initialTab, balance, defaultPhone, onClose, onBalance, initialDepositAmount }: Props) {
   const [activeTab, setActiveTab] = useState<WalletTab>(initialTab);
   const [depositFullscreen, setDepositFullscreen] = useState(false);
   const [withdrawFullscreen, setWithdrawFullscreen] = useState(false);
@@ -114,7 +115,7 @@ export default function WalletCenter({ initialTab, balance, defaultPhone, onClos
       ) : null}
 
       <div className="wallet-center-content">
-        {activeTab === "deposit" ? <DepositFlow embedded onFullscreenChange={setDepositFullscreen} onHistory={() => setActiveTab("history")} onClose={onClose} onBalance={onBalance} /> : null}
+        {activeTab === "deposit" ? <DepositFlow embedded initialAmount={initialDepositAmount} onFullscreenChange={setDepositFullscreen} onHistory={() => setActiveTab("history")} onClose={onClose} onBalance={onBalance} /> : null}
         {activeTab === "withdraw" ? (
           <Wallet embedded balance={balance} defaultPhone={defaultPhone} onClose={onClose} onBalance={onBalance} onFullscreenChange={setWithdrawFullscreen} onHistory={() => setActiveTab("history")} />
         ) : null}

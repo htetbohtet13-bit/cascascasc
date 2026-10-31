@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DepositVerificationPendingError, loadWalletMethods, submitDeposit, type PayMethod, type WalletMethods } from "./lib/wallet";
 import PaymentResult from "./PaymentResult";
+import { BonusPreview } from "./BonusOffer";
 
 type FlowStep = 1 | 2 | 3 | 4;
 type SubmitStatus = "idle" | "verifying" | "success" | "failed" | "pending";
@@ -11,6 +12,7 @@ type Props = {
   onHistory?: () => void;
   onClose: () => void;
   onBalance: (balance: number) => void;
+  initialAmount?: number;
 };
 
 const BANKS: { id: PayMethod; label: string; img: string; cls: string }[] = [
@@ -75,10 +77,10 @@ function IconCheck() {
   );
 }
 
-export default function DepositFlow({ embedded = false, onFullscreenChange, onHistory, onClose, onBalance }: Props) {
+export default function DepositFlow({ embedded = false, onFullscreenChange, onHistory, onClose, onBalance, initialAmount }: Props) {
   const [step, setStep] = useState<FlowStep>(1);
   const [method, setMethod] = useState<PayMethod | null>(null);
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(initialAmount ? String(initialAmount) : "");
   const [receiptDigits, setReceiptDigits] = useState("");
   const [config, setConfig] = useState<WalletMethods | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -101,7 +103,6 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
   const receiverName = paymentAccount?.name?.trim() ?? "";
   const promotion = config?.promotion;
   const bonusQualifies = promotion?.eligible === true && Number.isSafeInteger(numericAmount) && numericAmount >= promotion.minimum;
-  const bonusRequirement = bonusQualifies ? ((BigInt(numericAmount) + BigInt(promotion.bonus)) * BigInt(promotion.multiplier)).toLocaleString("my-MM") : "";
 
   // Update the surrounding wallet before paint without remounting this flow,
   // so the bank, amount, receipt input and in-flight verification stay intact.
@@ -359,13 +360,11 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
                 ))}
               </div>
             </div>
-            {promotion?.eligible ? (
-              <aside className="deposit-bonus-terms" aria-label="ဘောနပ်စ် စည်းကမ်းများ">
-                <strong>ကြိုဆိုဘောနပ်စ် ၅,၀၀၀ ကျပ်</strong>
-                <p>၅,၀၀၀ ကျပ်နှင့်အထက် ပထမဆုံးငွေသွင်းမှုအတွက် ဘောနပ်စ် ၅,၀၀၀ ကျပ် အလိုအလျောက်ရမည်။ အကောင့်တစ်ခုလျှင် တစ်ကြိမ်သာ ရရှိမည်။</p>
-                <p>ငွေသွင်းပမာဏနှင့် ဘောနပ်စ် စုစုပေါင်း၏ အဆ ၃၀ လောင်းကစားပြီးမှ ငွေထုတ်နိုင်မည်။ ဂိမ်းအားလုံး၏ အပြီးသတ်အလောင်းအစားများသာ အပြည့်အဝတွက်မည်။</p>
-                {bonusQualifies ? <p className="deposit-bonus-calculation">စုစုပေါင်းရမည့်ငွေ {(BigInt(numericAmount) + BigInt(promotion.bonus)).toLocaleString("my-MM")} ကျပ် · ဤငွေသွင်းမှုအတွက် လောင်းကစားရန် {bonusRequirement} ကျပ်</p> : <p>၅,၀၀၀ ကျပ်အောက် ငွေသွင်းပါက ဘောနပ်စ်အခွင့်အရေး မဆုံးရှုံးပါ။</p>}
-                <p>ယခင်ကျန်ရှိသော လောင်းကစားသတ်မှတ်ချက်များ ဆက်လက်သက်ရောက်မည်။ နောက်ထပ်ငွေသွင်းမှုများအတွက် ငွေသွင်းပမာဏအတိုင်း တစ်ဆ လောင်းကစားရမည်။</p>
+            {bonusQualifies ? (
+              <aside className="deposit-bonus-preview" aria-label="ကြိုဆိုဘောနပ်စ်">
+                <strong>ကြိုဆိုဘောနပ်စ်</strong>
+                <BonusPreview amount={numericAmount} bonus={promotion.bonus} />
+                <p>တစ်ကြိမ်သာ အလိုအလျောက်ရမည်။ သွင်းငွေ + ဘောနပ်စ်ကို အဆ ၃၀ လောင်းကစားပြီးမှ ငွေထုတ်နိုင်မည်။</p>
               </aside>
             ) : null}
             {message ? <p className="deposit-error">{message}</p> : null}

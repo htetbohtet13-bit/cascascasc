@@ -12,6 +12,7 @@ async function compile(path) {
 const walletCode = await compile("../src/lib/wallet.ts");
 const depositCode = await compile("../src/DepositFlow.tsx");
 const resultCode = await compile("../src/PaymentResult.tsx");
+const bonusCode = await compile("../src/BonusOffer.tsx");
 const flush = () => new Promise(setImmediate);
 
 function walletLibrary(fetch) {
@@ -114,6 +115,8 @@ function componentHarness(depositReply, promotion = { eligible: false, bonus: 50
   const jsx = (type, props) => typeof type === "function" ? type(props) : ({ type, props });
   const resultExports = {};
   runInNewContext(resultCode, { exports: resultExports, require: () => ({ jsx, jsxs: jsx }) });
+  const bonusExports = {};
+  runInNewContext(bonusCode, { exports: bonusExports, require: (name) => name === "react" ? react : { jsx, jsxs: jsx } });
   const addTimer = (callback, delay, repeat = false) => { const id = ++timerId; timers.set(id, { callback, delay, repeat }); return id; };
   runInNewContext(depositCode, {
     exports, Error,
@@ -124,6 +127,7 @@ function componentHarness(depositReply, promotion = { eligible: false, bonus: 50
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
       if (name === "./lib/wallet") return api;
       if (name === "./PaymentResult") return resultExports;
+      if (name === "./BonusOffer") return bonusExports;
       throw new Error(`Unexpected import: ${name}`);
     },
   });
@@ -197,19 +201,22 @@ test("rapid deposit confirmations invoke verification only once", async () => {
   assert.equal(app.closes(), 1);
 });
 
-test("eligible players see fixed bonus and exact 30x terms before payment; ineligible players see no bonus promise", async () => {
+test("eligible deposits from 5,000 show a compact preview with the fixed bonus and short 30x rule", async () => {
   const promotion = { eligible: true, bonus: 5000, minimum: 5000, multiplier: 30 };
-  for (const [amount, requirement, total] of [["5000", 300000n, 10000n], ["10000", 450000n, 15000n]]) {
+  for (const [amount, total] of [["5000", "10,000"], ["10000", "15,000"]]) {
     const app = componentHarness(() => { throw new Error("No verification before payment"); }, promotion);
     await app.toAmount(amount);
     const content = text(app.render());
-    assert.ok(content.includes("ကြိုဆိုဘောနပ်စ် ၅,၀၀၀ ကျပ်"));
-    assert.ok(content.includes("အလိုအလျောက်")); assert.ok(content.includes("အကောင့်တစ်ခုလျှင် တစ်ကြိမ်သာ"));
-    assert.ok(content.includes(requirement.toLocaleString("my-MM"))); assert.ok(content.includes(total.toLocaleString("my-MM")));
+    assert.ok(content.includes("ကြိုဆိုဘောနပ်စ်")); assert.ok(content.includes("+5,000"));
+    assert.ok(content.includes("အလိုအလျောက်")); assert.ok(content.includes("အဆ ၃၀"));
+    assert.ok(content.includes(total));
+    assert.ok(!content.includes("ယခင်ကျန်ရှိသော")); assert.ok(!content.includes("300,000"));
     assert.equal(app.calls.filter((call) => call.url === "/api/wallet/deposit").length, 0);
   }
   const app = componentHarness(() => reply({ ok: true, balance: 10000 }));
   await app.toAmount("5000"); assert.ok(!text(app.render()).includes("ကြိုဆိုဘောနပ်စ်"));
+  const small = componentHarness(() => reply({ ok: true, balance: 1000 }), promotion);
+  await small.toAmount("4999"); assert.ok(!text(small.render()).includes("ကြိုဆိုဘောနပ်စ်"));
 });
 
 test("a confirmed bonus receipt displays cash, bonus and total separately", async () => {

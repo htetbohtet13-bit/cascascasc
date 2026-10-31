@@ -4520,10 +4520,48 @@
 .payment-result-amount small { display: block; color: #8a795b; font-size: 10px; line-height: 1.8; }
 .payment-result-amount strong { display: block; margin-top: 6px; color: #372b1b; font-size: clamp(26px, 8vw, 34px); font-weight: 850; line-height: 1.5; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .payment-result-amount strong span { color: #8a795b; font-size: 12px; font-weight: 600; }
-.deposit-bonus-terms { margin: 14px 0; padding: 14px 16px; border: 1px solid #e5d1a6; border-radius: 14px; background: #fff7e7; color: #66512d; font-size: 12px; line-height: 1.9; }
-.deposit-bonus-terms strong { display: block; color: #77501b; font-size: 14px; }
-.deposit-bonus-terms p { margin: 7px 0 0; }
-.deposit-bonus-calculation { font-weight: 700; }
+.deposit-bonus-preview { margin: 12px 0; padding: 12px 14px; border: 1px solid #e5d1a6; border-radius: 13px; background: #fff9ee; color: #66512d; }
+.deposit-bonus-preview > strong { font-size: 12px; color: #77501b; }
+.deposit-bonus-preview > p { margin: 8px 0 0; color: #8b7757; font-size: 10px; line-height: 1.8; }
+.bonus-preview { margin: 0; font-variant-numeric: tabular-nums; }
+.bonus-preview > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
+.bonus-preview > div + div { border-top: 1px solid #e9deca; }
+.bonus-preview dt { min-width: 0; color: #8b795c; font-size: 12px; line-height: 1.8; }
+.bonus-preview dd { margin: 0; color: #49351c; font-size: 15px; font-weight: 800; white-space: nowrap; }
+.bonus-preview dd small { font-size: 10px; font-weight: 600; }
+.bonus-preview > div:nth-child(2) dd { color: #a37013; }
+.bonus-preview > div:last-child dd { color: #7b5310; font-size: 19px; }
+.deposit-bonus-preview .bonus-preview { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 8px; margin-top: 8px; }
+.deposit-bonus-preview .bonus-preview > div { display: block; padding: 0; border: 0; }
+.deposit-bonus-preview .bonus-preview dt { font-size: 9px; }
+.deposit-bonus-preview .bonus-preview dd { margin-top: 4px; font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
+.deposit-bonus-preview .bonus-preview dd small { font-size: 8px; }
+.bonus-page { padding: 18px 16px 26px; }
+.bonus-page > h2 { margin: 0 0 14px; color: var(--ui-ink); font-size: 16px; }
+.bonus-page-status { padding: 28px 12px; color: var(--ui-muted); text-align: center; font-size: 12px; line-height: 1.9; }
+.bonus-page-status button { padding: 8px 18px; border: 1px solid #d6b773; border-radius: 9px; background: #fff7e6; color: #795816; font: inherit; cursor: pointer; }
+.welcome-bonus-overlay { position: fixed; z-index: 160; inset: 0; display: flex; align-items: center; justify-content: center; padding: max(18px, env(safe-area-inset-top)) 14px max(18px, env(safe-area-inset-bottom)); background: #241b11a8; backdrop-filter: blur(5px); overflow-y: auto; }
+.welcome-bonus-dialog { width: 100%; max-width: 390px; max-height: 100%; overflow-y: auto; border-radius: 25px; box-shadow: 0 20px 75px #1f130f50; animation: payment-result-appear .25s ease-out; }
+.welcome-bonus-card { position: relative; padding: 28px 22px 22px; border: 1px solid #dec18b; border-radius: 25px; background: radial-gradient(ellipse at 50% 0, #ffe6a1 0, transparent 45%), linear-gradient(165deg, #fffdf8, #fff6e5); color: #51391c; text-align: center; overflow: hidden; }
+.welcome-bonus-close { position: absolute; top: 14px; right: 14px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid #e4d5b9; border-radius: 50%; background: #fffaf1ce; color: #826c4a; cursor: pointer; }
+.welcome-bonus-gift { position: relative; display: grid; place-items: center; width: 78px; height: 78px; margin: 5px auto 20px; border: 1px solid #e1b84e; border-radius: 24px; background: linear-gradient(145deg, #ffe79a, #e3b43d); color: #76501b; box-shadow: inset 0 2px 1px #fff9d8, 0 12px 25px #be87262b; transform: rotate(-7deg); }
+.welcome-bonus-gift svg { width: 44px; height: 44px; transform: rotate(7deg); }
+.welcome-bonus-gift::before, .welcome-bonus-gift::after { content: ""; position: absolute; border-radius: 50%; background: #d39a24; box-shadow: -110px 35px 0 -3px #d7b256, 108px 85px 0 -4px #a17a38; }
+.welcome-bonus-gift::before { top: 4px; right: -6px; width: 13px; height: 13px; background: #f8d477; }
+.welcome-bonus-gift::after { bottom: 8px; left: -7px; width: 9px; height: 9px; }
+.welcome-bonus-tag { display: inline-block; padding: 3px 11px; border: 1px solid #e3d0a5; border-radius: 20px; background: #fff8e9; color: #937139; font-size: 10px; line-height: 1.8; }
+.welcome-bonus-card h1 { margin: 12px 0 0; color: #68440d; font-size: 24px; font-weight: 850; line-height: 1.6; }
+.welcome-bonus-card h1 > span { display: block; color: #593b15; font-size: 52px; line-height: 1.15; font-weight: 900; letter-spacing: -2px; }
+.welcome-bonus-card h1 small { font-size: 14px; letter-spacing: 0; }
+.welcome-bonus-sub { margin: 7px 0 20px; color: #958164; font-size: 11px; line-height: 1.9; }
+.welcome-bonus-card .bonus-preview { padding: 4px 15px; border: 1px solid #e8d7b7; border-radius: 16px; background: #fffcf5; text-align: left; }
+.welcome-bonus-take { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 49px; margin-top: 18px; padding: 10px 14px; border: 1px solid #d9ad42; border-radius: 13px; background: var(--ui-gold-gradient, linear-gradient(120deg, #f5d677, #d9ae47)); box-shadow: inset 0 1px 0 #fff3c7, 0 5px 14px #a87a1321; color: #583c11; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
+.welcome-bonus-later { display: block; margin: 9px auto 0; padding: 5px 18px; border: 0; background: transparent; color: #a28e6a; font: inherit; font-size: 11px; cursor: pointer; }
+.welcome-bonus-rule { margin: 13px 0 0; color: #9a896d; font-size: 9px; line-height: 1.9; }
+.welcome-bonus-unavailable { margin: 17px 0 0; padding: 10px; border-radius: 10px; background: #f1eadc; color: #8b7a5f; font-size: 12px; line-height: 1.9; }
+.welcome-bonus-card button:focus-visible { outline: 2px solid #9e7120; outline-offset: 3px; }
+@media (max-height: 660px) { .welcome-bonus-card { padding-top: 20px; } .welcome-bonus-gift { width: 60px; height: 60px; margin-bottom: 12px; border-radius: 19px; } .welcome-bonus-gift svg { width: 36px; height: 36px; } .welcome-bonus-card h1 > span { font-size: 43px; } .welcome-bonus-sub { margin-bottom: 12px; } }
+@media (prefers-reduced-motion: reduce) { .welcome-bonus-dialog { animation: none; } }
 .wallet-history-amount > small { color: #8a641c; font-size: 10px; }
 .payment-result-details { margin: 0 20px; }
 .payment-result-bonus > div:last-child dd { color: #8a641c; }

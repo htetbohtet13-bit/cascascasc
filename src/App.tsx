@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { authenticate, getSession, signOut } from "./lib/auth";
 import { launchGame, loadGames, loadSlotBets, type Game, type SlotBet } from "./lib/game";
 import WalletCenter from "./WalletCenter";
 import AdminDashboard from "./AdminDashboard";
 import GameHistory from "./GameHistory";
+import BonusOffer, { WelcomeBonusModal } from "./BonusOffer";
+import { loadWalletMethods, type WalletMethods } from "./lib/wallet";
 
 type Mode = "signin" | "signup";
 type NavTab = "cashier" | "games" | "bonuses" | "profile";
@@ -157,6 +159,41 @@ export default function App() {
   const [bannerFailed, setBannerFailed] = useState<Record<number, boolean>>({});
   const [scrolled, setScrolled] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [bonusData, setBonusData] = useState<{ userId: string; promotion: WalletMethods["promotion"] } | null>(null);
+  const [bonusLoading, setBonusLoading] = useState(false);
+  const [bonusError, setBonusError] = useState(false);
+  const [bonusReload, setBonusReload] = useState(0);
+  const [welcomeFor, setWelcomeFor] = useState<string | null>(null);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [depositAmount, setDepositAmount] = useState<number | undefined>();
+  const closeWelcomeBonus = useCallback(() => setWelcomeOpen(false), []);
+  const userId = session?.user.id;
+  const bonusPromotion = bonusData?.userId === userId ? bonusData?.promotion : null;
+
+  useEffect(() => {
+    if (!userId || isAdminRoute) {
+      setBonusData(null);
+      setBonusLoading(false);
+      setBonusError(false);
+      return;
+    }
+    if (walletOpen) return;
+    let active = true;
+    setBonusLoading(true);
+    setBonusError(false);
+    loadWalletMethods().then((data) => {
+      if (typeof data?.promotion?.eligible !== "boolean") throw new Error("Bonus eligibility is unavailable");
+      if (active) setBonusData({ userId, promotion: data.promotion });
+    }).catch(() => { if (active) setBonusError(true); })
+      .finally(() => { if (active) setBonusLoading(false); });
+    return () => { active = false; };
+  }, [userId, walletOpen, bonusReload, isAdminRoute]);
+
+  useEffect(() => {
+    if (welcomeFor !== userId || !bonusPromotion || bonusLoading || bonusError) return;
+    setWelcomeOpen(bonusPromotion.eligible);
+    setWelcomeFor(null);
+  }, [welcomeFor, userId, bonusPromotion, bonusLoading, bonusError]);
 
   useEffect(() => {
     if (isAdminRoute) {
@@ -229,6 +266,10 @@ export default function App() {
       await authenticate(mode, phone, password);
       const nextSession = await getSession();
       setSession(nextSession?.user ? nextSession as Session : null);
+      if (mode === "signup" && nextSession?.user) {
+        setWelcomeFor(nextSession.user.id);
+        setSelectedGame(null);
+      }
       setPassword("");
     } catch (err) {
       setError(friendlyAuthError(err instanceof Error ? err.message : ""));
@@ -243,6 +284,8 @@ export default function App() {
     try {
       await signOut();
       setSession(null);
+      setWelcomeOpen(false);
+      setWelcomeFor(null);
       setProfile(null);
       setNavTab("games");
       setWalletOpen(false);
@@ -289,12 +332,14 @@ export default function App() {
     setAuthOpen(true);
   }
 
-  function openWallet(nextMode: "deposit" | "withdraw" = "deposit") {
+  function openWallet(nextMode: "deposit" | "withdraw" = "deposit", initialAmount?: number) {
     if (!session) {
       openAuth("signup");
       return;
     }
     setWalletMode(nextMode);
+    setDepositAmount(initialAmount);
+    setWelcomeOpen(false);
     setWalletOpen(true);
     setNavTab("cashier");
   }
@@ -310,6 +355,7 @@ export default function App() {
     }
     setWalletOpen(false);
     setNavTab(id);
+    if (id === "bonuses") setBonusReload((current) => current + 1);
     scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -502,7 +548,12 @@ export default function App() {
                 </button>
               </section>
             ) : navTab === "bonuses" ? (
-              <div className="placeholder-panel">ဘောနပ်စ် မရှိသေးပါ</div>
+              <section className="bonus-page" aria-label="ဘောနပ်စ်">
+                <h2>သင့်အတွက် ဘောနပ်စ်</h2>
+                {session && (bonusLoading || (!bonusPromotion && !bonusError)) ? <p className="bonus-page-status" role="status">ဘောနပ်စ်ကို စစ်ဆေးနေပါသည်…</p>
+                  : session && bonusError ? <div className="bonus-page-status" role="status"><p>ဘောနပ်စ်ကို ဖွင့်မရသေးပါ။ ပြန်လည်ကြိုးစားပါ။</p><button type="button" onClick={() => setBonusReload((current) => current + 1)}>ပြန်ဖွင့်မည်</button></div>
+                    : <BonusOffer guest={!session} unavailable={Boolean(session && !bonusPromotion?.eligible)} onTake={() => openWallet("deposit", 5000)} />}
+              </section>
             ) : (
               <>
                 <div className="banner-wrap">
@@ -659,6 +710,7 @@ export default function App() {
           {walletOpen ? (
             <WalletCenter
               initialTab={walletMode}
+              initialDepositAmount={depositAmount}
               balance={balance}
               defaultPhone={phoneNumber === "—" ? "" : phoneNumber}
               onClose={() => {
@@ -673,6 +725,7 @@ export default function App() {
         </div>
       </div>
       {authDialog}
+      {session && welcomeOpen && bonusPromotion?.eligible && !walletOpen ? <WelcomeBonusModal onClose={closeWelcomeBonus} onTake={() => openWallet("deposit", 5000)} /> : null}
     </div>
   );
 }
