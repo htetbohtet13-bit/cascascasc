@@ -201,14 +201,14 @@ test("rapid deposit confirmations invoke verification only once", async () => {
   assert.equal(app.closes(), 1);
 });
 
-test("eligible deposits from 5,000 show a compact preview with the fixed bonus and short 30x rule", async () => {
+test("eligible deposits from 5,000 show a compact amount preview without rules text", async () => {
   const promotion = { eligible: true, bonus: 5000, minimum: 5000, multiplier: 30 };
   for (const [amount, total] of [["5000", "10,000"], ["10000", "15,000"]]) {
     const app = componentHarness(() => { throw new Error("No verification before payment"); }, promotion);
     await app.toAmount(amount);
     const content = text(app.render());
     assert.ok(content.includes("ကြိုဆိုဘောနပ်စ်")); assert.ok(content.includes("+5,000"));
-    assert.ok(content.includes("အလိုအလျောက်")); assert.ok(content.includes("အဆ ၃၀"));
+    assert.ok(!content.includes("တစ်ကြိမ်သာ အလိုအလျောက်ရမည်")); assert.ok(!content.includes("အဆ ၃၀"));
     assert.ok(content.includes(total));
     assert.ok(!content.includes("ယခင်ကျန်ရှိသော")); assert.ok(!content.includes("300,000"));
     assert.equal(app.calls.filter((call) => call.url === "/api/wallet/deposit").length, 0);

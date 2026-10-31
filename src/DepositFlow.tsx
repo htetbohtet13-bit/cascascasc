@@ -357,7 +357,6 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
               <aside className="deposit-bonus-preview" aria-label="ကြိုဆိုဘောနပ်စ်">
                 <strong>ကြိုဆိုဘောနပ်စ်</strong>
                 <BonusPreview amount={numericAmount} bonus={promotion.bonus} />
-                <p>တစ်ကြိမ်သာ အလိုအလျောက်ရမည်။ သွင်းငွေ + ဘောနပ်စ်ကို အဆ ၃၀ လောင်းကစားပြီးမှ ငွေထုတ်နိုင်မည်။</p>
               </aside>
             ) : null}
             {message ? <p className="deposit-error">{message}</p> : null}
