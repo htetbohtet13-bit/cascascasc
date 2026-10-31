@@ -121,8 +121,7 @@ function friendlyAuthError(message: string) {
   const text = message.toLowerCase();
   if (text.includes("already registered")) return "ဤဖုန်းနံပါတ် ရှိပြီးသား ဖြစ်သည်";
   if (text.includes("valid phone")) return "ဖုန်းနံပါတ် မှန်အောင် ရိုက်ပါ";
-  if (text.includes("at least 6")) return "စကားဝှက် အနည်းဆုံး ၆ လုံး ထည့်ပါ";
-  if (text.includes("at least 8") || text.includes("between 8 and 128")) return "စကားဝှက် ၈ လုံးမှ ၁၂၈ လုံးအတွင်း ထည့်ပါ";
+  if (text.includes("at least 5") || text.includes("between 5 and 128")) return "စကားဝှက် ၅ လုံးမှ ၁၂၈ လုံးအတွင်း ထည့်ပါ";
   if (text.includes("too many")) return "အကြိမ်များစွာ ကြိုးစားထားပါသည်။ ခဏစောင့်ပြီး ပြန်လည်ကြိုးစားပါ။";
   if (text.includes("temporarily unavailable") || text.includes("could not complete authentication")) return "ယာယီအသုံးပြု၍ မရသေးပါ။ ခဏစောင့်ပြီး ပြန်လည်ကြိုးစားပါ။";
   if (text.includes("could not create account")) return "အကောင့်ဖွင့်၍ မရပါ။ အကောင့်ဝင်ရန် ကြိုးစားပါ သို့မဟုတ် အခြားဖုန်းနံပါတ်ကို အသုံးပြုပါ။";
@@ -422,9 +421,9 @@ export default function App() {
               type="text"
               name="password"
               autoComplete={signingIn ? "current-password" : "new-password"}
-              minLength={signingIn ? 1 : 8}
+              minLength={signingIn ? 1 : 5}
               maxLength={128}
-              placeholder={signingIn ? "စကားဝှက် ရိုက်ပါ" : "အနည်းဆုံး ၈ လုံး"}
+              placeholder={signingIn ? "စကားဝှက် ရိုက်ပါ" : "အနည်းဆုံး ၅ လုံး"}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               required

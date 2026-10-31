@@ -138,6 +138,9 @@ test("a guest uses the bonus page to create an account before accessing deposits
   assert.equal(app.offer().props.guest, true); app.offer().props.onTake(); await app.settle();
   assert.equal(app.wallet(), null); assert.ok(find(app.render(), (node) => node.type === "form" && node.props.className === "auth-form"));
   const dialog = find(app.render(), (node) => node.props?.className === "auth-box");
+  const password = find(dialog, (node) => node.type === "input" && node.props.name === "password");
+  assert.equal(password.props.minLength, 5); assert.equal(password.props.maxLength, 128);
+  assert.equal(password.props.placeholder, "အနည်းဆုံး ၅ လုံး");
   assert.ok(text(dialog).includes("🎁")); assert.ok(text(dialog).includes("စုစုပေါင်း 10,000 ကျပ် ရယူပါ"));
   assert.ok(text(dialog).includes("ငွေသွင်း 5,000 ကျပ် + ဘောနပ်စ် 5,000 ကျပ်"));
   assert.ok(!text(dialog).includes("အကောင့်ရှိပြီးသားလား?"));

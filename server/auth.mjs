@@ -69,8 +69,8 @@ export async function currentSession(req) {
 export async function signUpPhone(phoneInput, password) {
   const phone = normalizePhone(phoneInput);
   if (!phone) throw new AuthError("Enter a valid phone number");
-  if (typeof password !== "string" || password.length < 8 || password.length > 128) {
-    throw new AuthError("Password must be between 8 and 128 characters");
+  if (typeof password !== "string" || password.length < 5 || password.length > 128) {
+    throw new AuthError("Password must be between 5 and 128 characters");
   }
   const userId = randomUUID();
   const salt = randomBytes(16);
@@ -95,8 +95,8 @@ export async function signUpPhone(phoneInput, password) {
 
 export async function signInPhone(phoneInput, password) {
   const phone = normalizePhone(phoneInput);
-  // Existing six-character passwords remain usable; only new accounts use the
-  // stronger minimum. Never hash unbounded attacker-controlled password input.
+  // Keep existing passwords usable. Never hash unbounded attacker-controlled
+  // password input, or impose a changed signup minimum on existing accounts.
   if (!phone || typeof password !== "string" || !password.length || password.length > 128) throw new AuthError(AUTH_FAILURE, 401);
   const result = await getPool().query(
     `select p.id, p.phone, c.password_hash

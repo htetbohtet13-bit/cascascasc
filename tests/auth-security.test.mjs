@@ -210,12 +210,19 @@ test("expired limits reset without extending blocked windows and maintenance rem
   assert.equal((await db.query("select count(*)::integer as count from public.auth_rate_limits where scope='abandoned'")).rows[0].count, 0);
 });
 
-test("new passwords require 8-128 characters, while existing six-character passwords still sign in", async () => {
-  for (const [index, password] of ["1234567", "x".repeat(129), {}, null].entries()) {
+test("new passwords require 5-128 characters, while existing six-character passwords still sign in", async () => {
+  for (const [index, password] of ["", "1234", "x".repeat(129), {}, null].entries()) {
     const res = await auth({ phone: `0999999999${index}`, password }, { url: "/api/auth/sign-up" });
     assert.equal(res.statusCode, 400);
   }
   assert.equal(passwordHashes, 0);
+  for (const [index, password] of ["53927", "aBc!5", "x".repeat(128)].entries()) {
+    const phone = `0988888888${index}`;
+    const created = await signup(phone, password);
+    const signedIn = await auth({ phone, password });
+    assert.equal(signedIn.statusCode, 200);
+    assert.equal(signedIn.body.user.id, created.body.user.id);
+  }
   const id = crypto.randomUUID();
   const salt = Buffer.alloc(16, 3);
   const hash = `scrypt$${salt.toString("hex")}$${crypto.scryptSync("123456", salt, 64).toString("hex")}`;
