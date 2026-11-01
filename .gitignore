@@ -5,6 +5,14 @@ dist
 *.pem
 *.p12
 *.key
+*.jks
+*.keystore
+/android/.gradle/
+/android/.signing/
+/android/local.properties
+/android/keystore.properties
+/android/**/build/
+/artifacts/
 /SECURITY_REVIEW.local.md
 *.log
 .DS_Store

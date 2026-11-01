@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">J777</string>
+    <string name="loading">ဖွင့်နေပါသည်…</string>
+    <string name="connection_title">ချိတ်ဆက်၍ မရပါ</string>
+    <string name="connection_message">အင်တာနက်ချိတ်ဆက်မှုကို စစ်ဆေးပြီး ပြန်လည်ကြိုးစားပါ။</string>
+    <string name="retry">ပြန်လည်ကြိုးစားမည်</string>
+    <string name="home">ပင်မစာမျက်နှာ</string>
+    <string name="cannot_open">ဤလင့်ခ်ကို ဖွင့်၍ မရပါ။</string>
+    <string name="exit_title">အက်ပ်မှ ထွက်မလား။</string>
+    <string name="exit">ထွက်မည်</string>
+    <string name="cancel">မထွက်ပါ</string>
+</resources>
