@@ -228,7 +228,7 @@ public final class MainActivity extends Activity {
         error.setPadding(dp(28), dp(20), dp(28), dp(20));
         error.setBackgroundColor(CREAM);
         ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.brand_logo);
+        logo.setImageResource(R.drawable.launcher_logo);
         logo.setContentDescription(getString(R.string.app_name));
         error.addView(logo, new LinearLayout.LayoutParams(dp(88), dp(88)));
         TextView title = text(getString(R.string.connection_title), 20);

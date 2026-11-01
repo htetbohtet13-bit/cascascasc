@@ -16,6 +16,7 @@
         <activity
             tools:targetApi="33"
             android:name=".MainActivity"
+            android:icon="@mipmap/ic_launcher"
             android:exported="true"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize"
             android:windowSoftInputMode="adjustResize"

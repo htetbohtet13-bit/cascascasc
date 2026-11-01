@@ -698,7 +698,7 @@ export default function App() {
 
           <nav className={`bottom-navigation${walletOpen ? " hidden" : ""}`}>
             {showAppDownload ? (
-              <a className="android-app-download" href="/downloads/J777-v1.0.1.apk" download="J777-v1.0.1.apk">
+              <a className="android-app-download" href="/downloads/J777-v1.0.2.apk" download="J777-v1.0.2.apk">
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M12 3v12m-4-4 4 4 4-4M4 16v4h16v-4" />
                 </svg>
