@@ -536,6 +536,36 @@
   display: none;
 }
 
+.android-app-download {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  max-width: calc(100% - 32px);
+  padding: 8px 22px;
+  border: 1px solid #e8bb58;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ffe9ad, #e9b548);
+  box-shadow: 0 4px 14px #6e471d30, inset 0 1px 0 #fff8df;
+  color: #503512;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.7;
+  text-decoration: none;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.android-app-download svg { flex: 0 0 auto; }
+.android-app-download:active { filter: brightness(.96); }
+.android-app-download:focus-visible { outline: 3px solid #95621c; outline-offset: 3px; }
+.has-app-download .body-scroll { padding-bottom: 64px; }
+
 .nav-item {
   flex: 1;
   display: flex;

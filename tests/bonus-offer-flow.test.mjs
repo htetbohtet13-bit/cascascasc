@@ -23,7 +23,7 @@ function text(tree) {
 
 // Exercise account creation -> eligibility -> popup -> deposit routing. All
 // identity and configuration calls are mocked; no real account or payment exists.
-function appHarness({ loggedIn = false, eligible = true, failed = false, pending = false } = {}) {
+function appHarness({ loggedIn = false, eligible = true, failed = false, pending = false, userAgent = "" } = {}) {
   const states = []; const effects = []; const calls = [];
   let cursor = 0; let effectCursor = 0;
   let session = loggedIn ? { user: { id: "test-player" } } : null;
@@ -43,6 +43,7 @@ function appHarness({ loggedIn = false, eligible = true, failed = false, pending
   runInNewContext(appCode, {
     exports,
     window: { location: { pathname: "/" }, setInterval: () => 1, clearInterval() {} },
+    navigator: { userAgent },
     fetch: async (path, options) => {
       assert.equal(path, "/api/me"); assert.notEqual(options?.method, "POST");
       return { ok: true, json: async () => ({ profile: { phone: "09123456789", balance: 0, created_at: "2026-10-31T00:00:00Z" } }) };
@@ -145,6 +146,36 @@ test("a guest uses the bonus page to create an account before accessing deposits
   assert.ok(text(dialog).includes("ငွေသွင်း 5,000 ကျပ် + ဘောနပ်စ် 5,000 ကျပ်"));
   assert.ok(!text(dialog).includes("အကောင့်ရှိပြီးသားလား?"));
   assert.equal(find(dialog, (node) => node.props?.className === "auth-switch-line"), null);
+});
+
+const androidAgent = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/142.0.0.0 Mobile Safari/537.36";
+const downloadLink = (app) => find(app.render(), (node) => node.type === "a" && node.props.className === "android-app-download");
+
+test("Android visitors can download the APK without signing in after closing signup", async () => {
+  const app = appHarness({ userAgent: androidAgent }); await app.settle();
+  assert.equal(downloadLink(app), null);
+  find(app.render(), (node) => node.props.className === "auth-close").props.onClick();
+  const link = downloadLink(app);
+  assert.ok(link); assert.equal(text(link), "App ဒေါင်းလုဒ်");
+  assert.equal(link.props.href, "/downloads/J777-v1.0.1.apk");
+  assert.equal(link.props.download, "J777-v1.0.1.apk");
+  assert.equal(find(app.render(), (node) => node.props.className?.includes("has-app-download"))?.type, "div");
+  assert.deepEqual(app.calls, []);
+});
+
+test("app downloads stay hidden on iPhones, desktop browsers and inside the J777 Android app", async () => {
+  for (const userAgent of ["Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", `${androidAgent} J777App/1.0.1`]) {
+    const app = appHarness({ loggedIn: true, userAgent }); await app.settle();
+    assert.equal(downloadLink(app), null, userAgent);
+  }
+});
+
+test("Android download button stays out of wallet and bonus dialogs and returns afterward", async () => {
+  const app = appHarness({ userAgent: androidAgent }); await app.signup();
+  assert.ok(app.popup()); assert.equal(downloadLink(app), null);
+  app.popup().props.onClose(); await app.settle(); assert.ok(downloadLink(app));
+  await app.nav("cashier"); assert.ok(app.wallet()); assert.equal(downloadLink(app), null);
+  app.wallet().props.onClose(); await app.settle(); assert.ok(downloadLink(app));
 });
 
 const offerExports = {};

@@ -85,6 +85,7 @@ public final class MainActivity extends Activity {
     @SuppressLint("SetJavaScriptEnabled")
     private void configureWebView() {
         WebSettings settings = webView.getSettings();
+        settings.setUserAgentString(settings.getUserAgentString() + " J777App/" + BuildConfig.VERSION_NAME);
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setUseWideViewPort(true);
