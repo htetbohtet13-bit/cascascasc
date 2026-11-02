@@ -147,8 +147,8 @@ test("trusted game launch uses session identity and preserves a valid provider U
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.url, launchUrl);
   assert.equal(requests.at(-1).body.player_id, "local-player");
-  assert.equal(requests.at(-1).body.lobby_url, "j777ml.com");
-  assert.equal(JSON.parse(requests.at(-1).rawBody).lobby_url, "j777ml.com");
+  assert.equal(requests.at(-1).body.lobby_url, "https://j777ml.com/");
+  assert.equal(JSON.parse(requests.at(-1).rawBody).lobby_url, "https://j777ml.com/");
 });
 
 test("concurrent catalogue misses share one outbound request", async (t) => {
