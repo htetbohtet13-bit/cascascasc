@@ -57,7 +57,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Android build or checks failed.' }
     $artifactDirectory = Join-Path (Split-Path $projectRoot -Parent) 'artifacts'
     New-Item -ItemType Directory -Path $artifactDirectory -Force | Out-Null
-    $apkPath = Join-Path $artifactDirectory 'J777-v1.0.2.apk'
+    $apkPath = Join-Path $artifactDirectory 'J777-v1.0.3.apk'
     Copy-Item -LiteralPath '.\app\build\outputs\apk\release\app-release.apk' -Destination $apkPath -Force
     & (Join-Path $sdkPath 'build-tools\35.0.0\apksigner.bat') verify --verbose $apkPath
     if ($LASTEXITCODE -ne 0) { throw 'APK signature verification failed.' }

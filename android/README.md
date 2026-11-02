@@ -1,14 +1,14 @@
-# J777 Android WebView
+# ကျွဲဂိမ်း777 Android WebView
 
 Small native Android app for **https://www.j777ml.com/**, using the supplied buffalo logo.
-Package: `com.j777ml.app`; version: `1.0.2` (code 3); Android 8.0 or newer.
+App name: **ကျွဲဂိမ်း777**. Package: `com.j777ml.app`; version: `1.0.3` (code 4); Android 8.0 or newer.
 This is a signed APK for direct installation, not a Play Store submission.
 
 ## Features
 
 - Website fills the app, with Burmese loading and connection/retry messages.
 - Persistent first-party cookies and web storage keep the website session.
-- A `J777App/1.0.2` user-agent marker lets the website hide its app download button inside this app.
+- A `J777App/1.0.3` user-agent marker lets the website hide its app download button inside this app.
 - Standard PNG launcher icons at five densities, plus adaptive icons and a 777 themed icon.
   The exact uploaded artwork is kept in `branding/app-icon.png`; `prepare-icons.ps1`
   exports Android sizes without changing the artwork.
@@ -39,7 +39,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\android\build-apk.ps1
 ```
 
 The script runs navigation unit tests, Android release lint, builds and signs the
-release APK, verifies its signature and copies it to `artifacts/J777-v1.0.2.apk`.
+release APK, verifies its signature and copies it to `artifacts/J777-v1.0.3.apk`.
 Gradle wrapper downloads are checksum verified. Signing files and generated outputs
 are ignored by Git. No existing web or server build settings are changed.
 
@@ -48,7 +48,7 @@ in private storage.** The same signing key is required for future in-place updat
 Never upload either to GitHub or public download storage. Increment `versionCode`
 and `versionName` in `app/build.gradle` and the script's output filename for updates.
 
-The public download is `public/downloads/J777-v1.0.2.apk`. Copy the verified build
+The public download is `public/downloads/J777-v1.0.3.apk`. Copy the verified build
 there when updating the app, then update the link in `src/App.tsx` and the download
 header path in `vercel.json`. Publish only the APK; keep signing files private.
 

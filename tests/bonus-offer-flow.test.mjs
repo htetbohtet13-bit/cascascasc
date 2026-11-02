@@ -157,8 +157,8 @@ test("Android visitors can download the APK without signing in after closing sig
   find(app.render(), (node) => node.props.className === "auth-close").props.onClick();
   const link = downloadLink(app);
   assert.ok(link); assert.equal(text(link), "App ဒေါင်းလုဒ်");
-  assert.equal(link.props.href, "/downloads/J777-v1.0.2.apk");
-  assert.equal(link.props.download, "J777-v1.0.2.apk");
+  assert.equal(link.props.href, "/downloads/J777-v1.0.3.apk");
+  assert.equal(link.props.download, "J777-v1.0.3.apk");
   assert.equal(find(app.render(), (node) => node.props.className?.includes("has-app-download"))?.type, "div");
   assert.deepEqual(app.calls, []);
 });
