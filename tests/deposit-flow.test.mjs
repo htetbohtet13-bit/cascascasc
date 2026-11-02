@@ -74,7 +74,7 @@ function text(tree) {
   return tree && typeof tree === "object" ? text(tree.props?.children) : "";
 }
 
-function componentHarness(depositReply, promotion = { eligible: false, bonus: 5000, minimum: 5000, multiplier: 30 }) {
+function componentHarness(depositReply, promotion = { eligible: false, bonus: 5000, minimum: 5000, multiplier: 30 }, initialAmount) {
   const states = [];
   const effects = [];
   const timers = new Map();
@@ -131,7 +131,7 @@ function componentHarness(depositReply, promotion = { eligible: false, bonus: 50
       throw new Error(`Unexpected import: ${name}`);
     },
   });
-  const props = { embedded: true, onClose: () => { closes++; }, onBalance: (balance) => balances.push(balance), onHistory: () => { histories++; }, onFullscreenChange() {} };
+  const props = { embedded: true, initialAmount, onClose: () => { closes++; }, onBalance: (balance) => balances.push(balance), onHistory: () => { histories++; }, onFullscreenChange() {} };
   const render = () => { cursor = 0; effectCursor = 0; return exports.default(props); };
   const settle = async () => {
     for (let pass = 0; pass < 3; pass++) {
@@ -151,10 +151,11 @@ function componentHarness(depositReply, promotion = { eligible: false, bonus: 50
   const button = (label) => find(render(), (node) => node.type === "button" && text(node) === label);
   render();
   return { render, settle, button, balances, timers, calls, closes: () => closes, histories: () => histories,
-    async toAmount(value = "1000") {
+    async toAmount(value = initialAmount ? String(initialAmount) : "1000") {
       await settle();
       find(render(), (node) => node.type === "button" && node.props.className === "deposit-bank-card kbz").props.onClick();
-      find(render(), (node) => node.type === "input" && node.props["aria-label"] === "ငွေပမာဏ").props.onChange({ target: { value } });
+      const input = find(render(), (node) => node.type === "input" && node.props["aria-label"] === "ငွေပမာဏ");
+      if (input.props.value !== value) input.props.onChange({ target: { value } });
     },
     async toReceipt(value = "1000") {
       await this.toAmount(value);
@@ -204,8 +205,11 @@ test("rapid deposit confirmations invoke verification only once", async () => {
 test("eligible deposits from 5,000 show a compact amount preview without rules text", async () => {
   const promotion = { eligible: true, bonus: 5000, minimum: 5000, multiplier: 30 };
   for (const [amount, total] of [["5000", "10,000"], ["10000", "15,000"]]) {
-    const app = componentHarness(() => { throw new Error("No verification before payment"); }, promotion);
-    await app.toAmount(amount);
+    const app = componentHarness(() => { throw new Error("No verification before payment"); }, promotion, Number(amount));
+    await app.toAmount();
+    const input = find(app.render(), (node) => node.type === "input" && node.props["aria-label"] === "ငွေပမာဏ");
+    assert.equal(input.props.value, amount);
+    assert.ok(!input.props.autoFocus, "The bonus deposit should wait for a tap before opening the keyboard");
     const content = text(app.render());
     assert.ok(content.includes("ကြိုဆိုဘောနပ်စ်")); assert.ok(content.includes("+5,000"));
     assert.ok(!content.includes("တစ်ကြိမ်သာ အလိုအလျောက်ရမည်")); assert.ok(!content.includes("အဆ ၃၀"));

@@ -4744,3 +4744,35 @@
 .admin-player-count:disabled, .admin-player-count-form button:disabled { opacity: .5; cursor: wait; }
 .admin-player-count:focus-visible, .admin-player-count-form input:focus-visible, .admin-player-count-form button:focus-visible { outline: 2px solid #ad822d; outline-offset: 2px; }
 .profile-activity-game strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Keep the amount and bonus preview together without opening the keyboard. */
+.deposit-scroll.is-amount,
+.wallet-center .deposit-flow.wallet-embedded .deposit-scroll.is-amount {
+  padding: 6px 16px max(10px, env(safe-area-inset-bottom));
+}
+.deposit-amount-step .deposit-chosen { gap: 10px; padding: 8px 12px; margin-bottom: 10px; border-radius: 14px; }
+.deposit-amount-step .deposit-chosen img { width: 38px; height: 38px; border-radius: 10px; }
+.deposit-amount-step .deposit-chosen em { margin-top: 0; }
+.deposit-amount-step .deposit-chosen button { min-height: 40px; padding: 0 4px; font-size: 11px; }
+.deposit-amount-step h1 { font-size: 19px; line-height: 1.7; }
+.deposit-amount-step .deposit-sub { margin: 0 0 8px; line-height: 1.7; }
+.deposit-amount-step .deposit-amount-card { padding: 10px; border-radius: 14px; }
+.deposit-amount-step .deposit-amount-box { height: 48px; border-radius: 10px; }
+.deposit-amount-step .deposit-amount-box input { font-size: 22px !important; }
+.deposit-amount-step .deposit-quick { gap: 6px; margin-top: 8px; }
+.deposit-amount-step .deposit-quick button { height: 40px; }
+.deposit-amount-step .deposit-bonus-preview { margin: 8px 0 0; padding: 8px 10px; border-radius: 12px; }
+.deposit-amount-step .deposit-bonus-preview > strong { display: block; font-size: 11px; line-height: 1.7; }
+.deposit-amount-step .bonus-preview { margin-top: 4px; }
+.deposit-amount-step .bonus-preview dd { margin-top: 2px; line-height: 1.5; }
+.deposit-amount-step .deposit-primary { height: 44px; margin-top: 10px; }
+@media (max-height: 620px) {
+  .deposit-scroll.is-amount,
+  .wallet-center .deposit-flow.wallet-embedded .deposit-scroll.is-amount { padding-top: 4px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  .deposit-amount-step .deposit-chosen { padding-top: 6px; padding-bottom: 6px; margin-bottom: 6px; }
+  .deposit-amount-step .deposit-sub { margin-bottom: 4px; }
+  .deposit-amount-step .deposit-amount-card { padding: 8px; }
+  .deposit-amount-step .deposit-quick { margin-top: 6px; }
+  .deposit-amount-step .deposit-bonus-preview { padding-top: 6px; padding-bottom: 6px; margin-top: 6px; }
+  .deposit-amount-step .deposit-primary { margin-top: 8px; }
+}

@@ -254,7 +254,7 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
       ) : null}
 
       <div
-        className={`deposit-scroll${step === 3 && !directing ? " pay-page" : ""}${directing ? " is-directing" : ""}`}
+        className={`deposit-scroll${step === 2 && !directing ? " is-amount" : ""}${step === 3 && !directing ? " pay-page" : ""}${directing ? " is-directing" : ""}`}
       >
         {directing ? (
           <section className="deposit-directing">
@@ -308,7 +308,7 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
         ) : null}
 
         {step === 2 && method && bank && !directing ? (
-          <section className="deposit-section">
+          <section className="deposit-section deposit-amount-step">
             <div className="deposit-panel deposit-chosen">
               <img src={bank.img} alt="" />
               <div>
@@ -322,7 +322,6 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
             <h1>ပမာဏထည့်ပါ</h1>
             <p className="deposit-sub">အနည်းဆုံး 1,000 Ks</p>
             <div className="deposit-panel deposit-amount-card">
-              <div className="deposit-label">ငွေပမာဏ</div>
               <div className="deposit-amount-box">
                 <input
                   value={amount}
@@ -331,7 +330,6 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
                     setMessage(null);
                   }}
                   inputMode="numeric"
-                  autoFocus
                   placeholder="0"
                   aria-label="ငွေပမာဏ"
                 />
