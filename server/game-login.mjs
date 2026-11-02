@@ -64,6 +64,7 @@ export async function handleGameLogin({ userId, gameCode, tableId, device = "mob
     game_code: gameCode,
     ...(selectedTableId ? { table_id: selectedTableId } : {}),
     language: "my",
+    lobby_url: "j777ml.com",
     device: device === "desktop" ? "desktop" : "mobile",
   };
   const providerResult = await callSkmApi("game/launch", { method: "POST", payload });
