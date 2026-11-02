@@ -143,10 +143,12 @@ test("trusted game launch uses session identity and preserves a valid provider U
     return new Response(JSON.stringify(envelope.method === "GET" ? { games: [{ game_code: "shankoemee" }] } : { url: launchUrl }));
   });
   const res = response();
-  await gameLogin(request('{"game_code":"shankoemee","userId":"attacker-selected"}', { origin: "https://www.j777ml.com", "content-type": "application/json" }), res);
+  await gameLogin(request('{"game_code":"shankoemee","userId":"attacker-selected","lobby_url":"https://attacker.example/"}', { origin: "https://www.j777ml.com", "content-type": "application/json" }), res);
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.url, launchUrl);
   assert.equal(requests.at(-1).body.player_id, "local-player");
+  assert.equal(requests.at(-1).body.lobby_url, "https://www.j777ml.com/");
+  assert.equal(JSON.parse(requests.at(-1).rawBody).lobby_url, "https://www.j777ml.com/");
 });
 
 test("concurrent catalogue misses share one outbound request", async (t) => {
