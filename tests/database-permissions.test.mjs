@@ -14,7 +14,7 @@ async function migration(name) {
 before(async () => {
   for (const name of ["001_app_schema.sql", "002_phone_auth.sql", "005_skm_seamless_wallet.sql",
     "006_game_display_settings.sql", "007_game_hot_setting.sql", "008_deposit_wagering.sql",
-    "009_auth_security.sql", "010_money_constraints.sql", "011_runtime_role.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql", "014_game_player_ranges.sql"]) await migration(name);
+    "009_auth_security.sql", "010_money_constraints.sql", "011_runtime_role.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql", "014_game_player_ranges.sql", "015_withdrawal_resolution.sql"]) await migration(name);
 });
 after(async () => { await db.close(); });
 
@@ -66,8 +66,24 @@ test("runtime can perform required app writes, but cannot drop/create tables or 
 test("an unrelated role cannot read player credentials or balances through PUBLIC grants", async () => {
   await db.exec("create role security_unrelated_test nologin; set role security_unrelated_test");
   try {
-    for (const table of ["profiles", "auth_credentials", "auth_sessions", "auth_admin_sessions", "auth_rate_limits", "wallet_wagering_events", "deposit_bonus_campaign"]) {
+    for (const table of ["profiles", "auth_credentials", "auth_sessions", "auth_admin_sessions", "auth_rate_limits", "wallet_wagering_events", "deposit_bonus_campaign", "withdrawal_resolutions"]) {
       await assert.rejects(() => db.query(`select * from public.${table}`), (error) => error.code === "42501");
     }
   } finally { await db.exec("reset role"); }
+});
+
+test('runtime audit permissions remain append-only after role hardening is rerun', async () => {
+  await migration('011_runtime_role.sql');
+  const access = (await db.query(`select
+    has_table_privilege('j777_runtime','public.withdrawal_resolutions','SELECT') as can_read,
+    has_table_privilege('j777_runtime','public.withdrawal_resolutions','INSERT') as can_insert,
+    has_table_privilege('j777_runtime','public.withdrawal_resolutions','UPDATE') as can_update,
+    has_table_privilege('j777_runtime','public.withdrawal_resolutions','DELETE') as can_delete`)).rows[0];
+  assert.deepEqual(access, { can_read: true, can_insert: true, can_update: false, can_delete: false });
+  await db.exec('set role j777_runtime');
+  try {
+    for (const sql of ['update public.withdrawal_resolutions set reason=reason', 'delete from public.withdrawal_resolutions']) {
+      await assert.rejects(() => db.query(sql), (error) => error.code === '42501');
+    }
+  } finally { await db.exec('reset role'); }
 });

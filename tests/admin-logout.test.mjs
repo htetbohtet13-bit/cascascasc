@@ -61,6 +61,7 @@ function componentHarness(fetchResult, { authenticated = false } = {}) {
       if (name === "./lib/format-money") return moneyExports;
       if (name === "./lib/player-count") return playerCountExports;
       if (name === "./GamePlayerCount") return { default: () => null };
+      if (name === "./WithdrawalReview") return { default: () => null };
       throw new Error(`Unexpected component import: ${name}`);
     },
     fetch: async (...args) => {

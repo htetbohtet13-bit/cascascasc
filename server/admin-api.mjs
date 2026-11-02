@@ -8,6 +8,8 @@ import { adminMfaConfig, adminSessionKey, claimAdminTotp, matchingAdminTotpStep 
 import { overviewWindow, readAdminOverview } from "./admin-overview.mjs";
 import { adminGameHistory, playerGameHistory } from "./game-history.mjs";
 import { parsePlayerCount } from "./player-count.mjs";
+import { trustedClientIp } from "./request-security.mjs";
+import { readWithdrawalReview, resolveWithdrawal, withdrawalReviewUnavailable } from "./withdrawal-resolution.mjs";
 
 const PAGE_SIZE = 50;
 const MAX_PAGE = 1_000_000;
@@ -352,6 +354,19 @@ async function adminRequest(req) {
       };
     }
     if (!await validAdminSession(req, sessionKey)) return unauthorized();
+    if (action === "resolve_withdrawal") {
+      const limited = await consumeRateLimit(req, "admin-withdrawal-resolve", "shared-admin");
+      if (limited) return limited;
+      const attempt = typeof req.body?.password === "string" && req.body.password.length <= 4096 ? req.body.password : "";
+      if (!passwordsMatch(attempt, secret)) return { status: 403, body: { error: "Admin password is incorrect. No withdrawal changes were made." } };
+      const step = mfa ? matchingAdminTotpStep(mfa, req.body?.code) : null;
+      if (mfa && step === null) return { status: 403, body: { error: "Enter a valid authenticator code. No withdrawal changes were made." } };
+      const result = await resolveWithdrawal({ body: req.body,
+        actorSessionHash: sessionHash(cookieValue(req, ADMIN_SESSION_COOKIE)), clientIp: trustedClientIp(req),
+        claimSecondFactor: mfa ? (client) => claimAdminTotp(client, mfa, step) : undefined,
+      });
+      return { ...result, body: { ...result.body, mfaRequired: Boolean(mfa) } };
+    }
     if (action === "save_game_settings") return await saveGameSettings(req.body);
     if (action === "set_game_visibility") return await setGameVisibility(req.body);
     if (action === "set_game_hot") return await setGameHot(req.body);
@@ -365,6 +380,12 @@ async function adminRequest(req) {
   const pool = getPool();
 
   try {
+    if (view === "withdrawal") {
+      try {
+        const review = await readWithdrawalReview(pool, url.searchParams.get("order_id") || "");
+        return { ...review, body: { ...review.body, mfaRequired: Boolean(mfa) } };
+      } catch (error) { return withdrawalReviewUnavailable(error); }
+    }
     if (view === "overview") {
       const range = overviewWindow(url.searchParams.get("range") || "today");
       if (!range) return { status: 400, body: { error: "Choose a valid overview date range" } };

@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 import { formatMoney } from "./lib/format-money";
 import { playerCountLabel } from "./lib/player-count";
 import GamePlayerCount from "./GamePlayerCount";
+import WithdrawalReview from "./WithdrawalReview";
 
 type Section = "overview" | "users" | "games" | "bets" | "deposits" | "withdrawals";
 type OverviewRange = "today" | "yesterday" | "week" | "month" | "all";
@@ -90,6 +91,7 @@ export default function AdminDashboard() {
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
   const requestVersion = useRef(0);
+  const [reviewOrderId, setReviewOrderId] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -128,6 +130,7 @@ export default function AdminDashboard() {
         .catch((reason: Error & { status?: number; mfaRequired?: boolean }) => {
           if (!isCurrent()) return;
           setSessionVerified(false);
+          setReviewOrderId("");
           setData({});
           setError(reason.message || "Could not load dashboard data");
           setAuthCode(reason.status || 0);
@@ -189,6 +192,7 @@ export default function AdminDashboard() {
     // An earlier dashboard response must not restore access after sign-out.
     requestVersion.current += 1;
     setLoading(false);
+    setReviewOrderId("");
     setError("");
     try {
       const response = await fetch("/api/admin", {
@@ -307,17 +311,17 @@ export default function AdminDashboard() {
             <div className="admin-detail-grid">
               <div className="admin-detail-card"><small>Provider player ID</small><strong>{detail.user.id}</strong></div>
               <div className="admin-detail-card"><small>Joined</small><strong>{date(detail.user.created_at)}</strong></div>
-              <div className="admin-detail-card"><small>Total bets shown</small><strong>{detail.bets?.length ?? 0}</strong></div>
+              <div className="admin-detail-card"><small>Recent bets shown (up to 25)</small><strong>{detail.bets?.length ?? 0}</strong></div>
               {detail.bonus ? <div className="admin-detail-card"><small>Welcome bonus awarded · {date(detail.bonus.completed_at)}</small><strong>{money(detail.bonus.bonus_amount)}</strong><p>Deposit: {money(detail.bonus.amount)} · Initial wagering: {money(detail.bonus.wagering_required)}</p><small>Order: {detail.bonus.order_id}</small></div> : null}
             </div>
             <div className="admin-detail-sections">
               <DetailBets bets={detail.bets ?? []} />
               <DetailWallet title="Deposits" rows={detail.deposits ?? []} />
-              <DetailWallet title="Withdrawals" rows={detail.withdrawals ?? []} />
+              <DetailWallet title="Withdrawals" rows={detail.withdrawals ?? []} onReview={setReviewOrderId} />
             </div>
           </div>
         ) : section === "overview" ? (
-          <Overview data={data} loading={loading} onOpen={changeSection} range={overviewRange} onRangeChange={(next) => { if (next === overviewRange) return; requestVersion.current += 1; setLoading(true); setOverviewRange(next); }} />
+          <Overview data={data} loading={loading} onOpen={changeSection} range={overviewRange} onReviewWithdrawal={setReviewOrderId} onRangeChange={(next) => { if (next === overviewRange) return; requestVersion.current += 1; setLoading(true); setOverviewRange(next); }} />
         ) : section === "games" ? (
           <div className="admin-page-content"><ProviderGames games={(data as Payload).games ?? []} loading={loading} settingsConfigured={(data as Payload).settingsConfigured !== false} onSaved={() => setRefreshKey((value) => value + 1)} /></div>
         ) : (
@@ -335,16 +339,20 @@ export default function AdminDashboard() {
             {section === "users" ? <UsersTable users={(data as Payload).users ?? []} loading={loading} onSelect={setSelectedUserId} /> : null}
             {section === "bets" ? <BetsTable bets={(data as Payload).bets ?? []} loading={loading} onSelect={setSelectedUserId} /> : null}
             {section === "deposits" ? <WalletTable rows={(data as Payload).deposits ?? []} loading={loading} onSelect={setSelectedUserId} kind="deposit" /> : null}
-            {section === "withdrawals" ? <WalletTable rows={(data as Payload).withdrawals ?? []} loading={loading} onSelect={setSelectedUserId} kind="withdrawal" /> : null}
+            {section === "withdrawals" ? <WalletTable rows={(data as Payload).withdrawals ?? []} loading={loading} onSelect={setSelectedUserId} kind="withdrawal" onReview={setReviewOrderId} /> : null}
             <div className="admin-pagination"><span>Page {page} of {Math.max(1, Math.ceil(total / pageSize))}</span><div><button type="button" disabled={!canGoBack || loading} onClick={() => setPage((value) => value - 1)}>Previous</button><button type="button" disabled={!canGoNext || loading} onClick={() => setPage((value) => value + 1)}>Next</button></div></div>
           </div>
         )}
       </section>
+      {reviewOrderId ? <WithdrawalReview key={reviewOrderId} orderId={reviewOrderId}
+        onClose={() => { setReviewOrderId(""); setRefreshKey((n) => n + 1); }}
+        onResolved={() => setRefreshKey((n) => n + 1)}
+        onUnauthorized={(required) => { requestVersion.current += 1; setReviewOrderId(""); setData({}); setSessionVerified(false); setMfaRequired(required); setAuthCode(401); }} /> : null}
     </main>
   );
 }
 
-function Overview({ data, loading, onOpen, range, onRangeChange }: { data: Payload; loading: boolean; onOpen: (section: Section) => void; range: OverviewRange; onRangeChange: (range: OverviewRange) => void }) {
+function Overview({ data, loading, onOpen, range, onRangeChange, onReviewWithdrawal }: { data: Payload; loading: boolean; onOpen: (section: Section) => void; range: OverviewRange; onRangeChange: (range: OverviewRange) => void; onReviewWithdrawal: (orderId: string) => void }) {
   const summary = data.summary ?? {};
   const rangeTitle = OVERVIEW_RANGES.find((item) => item.id === range)?.title;
   const cards = [
@@ -381,7 +389,7 @@ function Overview({ data, loading, onOpen, range, onRangeChange }: { data: Paylo
       <p className="admin-report-note">Bet volume and wins include settled bets only, by settlement time in Myanmar. Banker activity is separate.</p>
       <div className="admin-overview-columns">
         <section className="admin-panel"><div className="admin-panel-heading"><div><span>LATEST ACTIVITY</span><h3>Recent game activity</h3></div><button type="button" onClick={() => onOpen("bets")}>View all</button></div><BetsTable bets={data.latestBets ?? []} loading={loading} onSelect={() => {}} compact /></section>
-        <section className="admin-panel"><div className="admin-panel-heading"><div><span>WALLET QUEUE</span><h3>Recent withdrawals</h3></div><button type="button" onClick={() => onOpen("withdrawals")}>View all</button></div><WalletTable rows={data.latestWithdrawals ?? []} loading={loading} onSelect={() => {}} kind="withdrawal" compact /></section>
+        <section className="admin-panel"><div className="admin-panel-heading"><div><span>WALLET QUEUE</span><h3>Recent withdrawals</h3></div><button type="button" onClick={() => onOpen("withdrawals")}>View all</button></div><WalletTable rows={data.latestWithdrawals ?? []} loading={loading} onSelect={() => {}} kind="withdrawal" compact onReview={onReviewWithdrawal} /></section>
       </div>
     </div>
   );
@@ -600,15 +608,15 @@ function BetsTable({ bets, loading, onSelect, compact = false }: { bets: BetRow[
   </tr>)}</tbody></table></div>;
 }
 
-function WalletTable({ rows, loading, onSelect, kind, compact = false }: { rows: WalletRow[]; loading: boolean; onSelect: (id: string) => void; kind: "deposit" | "withdrawal"; compact?: boolean }) {
+function WalletTable({ rows, loading, onSelect, kind, compact = false, onReview }: { rows: WalletRow[]; loading: boolean; onSelect: (id: string) => void; kind: "deposit" | "withdrawal"; compact?: boolean; onReview?: (orderId: string) => void }) {
   if (!rows.length) return <TableEmpty loading={loading} />;
-  return <div className={`admin-table-wrap${compact ? " compact" : ""}`}><table className="admin-table"><thead><tr><th>Player</th><th>Method</th><th>{kind === "deposit" ? "Receipt reference" : "Payout phone"}</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>{rows.map((row) => <tr key={row.order_id}><td><button type="button" className="admin-player-link" onClick={() => onSelect(row.user_id)}>{row.phone}</button><small>{row.order_id}</small></td><td>{row.service_type === "kbzpay" ? "KBZPay" : "WavePay"}</td><td>{row.reference || row.payout_phone || row.provider_txn_id || "—"}</td><td className="admin-number">{money(row.amount)}{Number(row.bonus_amount) > 0 ? <small>Bonus +{money(row.bonus_amount)}</small> : null}</td><td><Status value={row.status} /></td><td>{date(row.created_at)}</td></tr>)}</tbody></table></div>;
+  return <div className={`admin-table-wrap${compact ? " compact" : ""}`}><table className="admin-table"><thead><tr><th>Player</th><th>Method</th><th>{kind === "deposit" ? "Receipt reference" : "Payout phone"}</th><th>Amount</th><th>Status</th><th>Date</th>{onReview ? <th>Review</th> : null}</tr></thead><tbody>{rows.map((row) => <tr key={row.order_id}><td><button type="button" className="admin-player-link" onClick={() => onSelect(row.user_id)}>{row.phone}</button><small>{row.order_id}</small></td><td>{row.service_type === "kbzpay" ? "KBZPay" : "WavePay"}</td><td>{row.reference || row.payout_phone || row.provider_txn_id || "—"}</td><td className="admin-number">{money(row.amount)}{Number(row.bonus_amount) > 0 ? <small>Bonus +{money(row.bonus_amount)}</small> : null}</td><td><Status value={row.status} /></td><td>{date(row.created_at)}</td>{onReview ? <td><button type="button" className="admin-row-action" onClick={() => onReview(row.order_id)}>{row.status === 'pending' ? 'Resolve' : 'Details'}</button></td> : null}</tr>)}</tbody></table></div>;
 }
 
 function DetailBets({ bets }: { bets: BetRow[] }) {
   return <section className="admin-panel"><div className="admin-panel-heading"><div><span>PLAYER ACTIVITY</span><h3>Recent game activity</h3></div></div>{bets.length ? <div className="admin-detail-records">{bets.map((bet) => <div key={bet.bet_uid}><span>{bet.game_code ?? "Legacy game"}<small>{date(bet.created_at)} · {bet.status ?? "settled"}</small><small>Round {bet.round_id || "—"}</small></span><strong>{bet.activity_type === "banker" ? `Reserved ${money(bet.held_amount)}` : `Stake ${money(bet.bet)}`}<small>Net {bet.changemoney == null ? "—" : money(bet.changemoney)}</small></strong></div>)}</div> : <TableEmpty loading={false} />}</section>;
 }
 
-function DetailWallet({ title, rows }: { title: string; rows: WalletRow[] }) {
-  return <section className="admin-panel"><div className="admin-panel-heading"><div><span>PLAYER WALLET</span><h3>{title}</h3></div></div>{rows.length ? <div className="admin-detail-records">{rows.map((row) => <div key={row.order_id}><span>{row.service_type === "kbzpay" ? "KBZPay" : "WavePay"}<small>{date(row.created_at)}</small></span><strong>{money(row.amount)}{Number(row.bonus_amount) > 0 ? <small>Bonus +{money(row.bonus_amount)}</small> : null}<small><Status value={row.status} /></small></strong></div>)}</div> : <TableEmpty loading={false} />}</section>;
+function DetailWallet({ title, rows, onReview }: { title: string; rows: WalletRow[]; onReview?: (orderId: string) => void }) {
+  return <section className="admin-panel"><div className="admin-panel-heading"><div><span>PLAYER WALLET</span><h3>{title}</h3></div></div>{rows.length ? <div className="admin-detail-records">{rows.map((row) => <div key={row.order_id}><span>{row.service_type === "kbzpay" ? "KBZPay" : "WavePay"}<small>{date(row.created_at)}</small>{onReview ? <button className="admin-row-action" type="button" onClick={() => onReview(row.order_id)}>{row.status === 'pending' ? 'Resolve' : 'Details'}</button> : null}</span><strong>{money(row.amount)}{Number(row.bonus_amount) > 0 ? <small>Bonus +{money(row.bonus_amount)}</small> : null}<small><Status value={row.status} /></small></strong></div>)}</div> : <TableEmpty loading={false} />}</section>;
 }
