@@ -4,7 +4,7 @@ import { wageringMessage, wageringTracker } from "./wagering.mjs";
 import { addMoney, money, moneyNumber, positiveMoney, subtractMoney } from "./money.mjs";
 import { payoutPolicy, payoutBlocked, checkPayoutLimits } from "./payout-security.mjs";
 import { BONUS_MIN_DEPOSIT, BONUS_MULTIPLIER, DEPOSIT_BONUS, depositBonusEligibility, depositCreditDetails } from "./deposit-bonus.mjs";
-import { readDepositBanks } from "./deposit-banks.mjs";
+import { BANK_UNAVAILABLE_MESSAGE, lockBankAvailability, readDepositBanks } from "./deposit-banks.mjs";
 
 // Use one lock order across deposits, reservations, refunds and completions.
 async function lockedProfile(client, userId) {
@@ -145,6 +145,16 @@ export async function reserveWithdraw({ userId, orderId, serviceType, amount, ph
       };
     }
 
+    try {
+      if (!await lockBankAvailability(client, serviceType)) {
+        return { ok: false, status: 409, code: "BANK_UNAVAILABLE", message: BANK_UNAVAILABLE_MESSAGE };
+      }
+    } catch (error) {
+      // A failed query must roll the transaction back; never continue in an
+      // aborted transaction or reserve funds with an unknown bank state.
+      error.code = "BANK_STATUS_UNAVAILABLE";
+      throw error;
+    }
     const availableBalance = money(profile.rows[0].balance);
     if (availableBalance < money(amount)) return { ok: false, message: "Not enough balance" };
 

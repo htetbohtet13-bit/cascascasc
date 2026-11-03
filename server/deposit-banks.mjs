@@ -1,6 +1,16 @@
 import { getPool } from "./neon.mjs";
 
-export const BANK_UNAVAILABLE_MESSAGE = "ဤဘဏ်ဖြင့် ငွေသွင်းခြင်းကို ယာယီအသုံးပြု၍မရပါ။ အခြားဘဏ်ကို ရွေးပါ သို့မဟုတ် ခဏစောင့်ပြီး ပြန်လည်ကြိုးစားပါ။";
+export const BANK_UNAVAILABLE_MESSAGE = "ဤဘဏ်ကို ယာယီအသုံးပြု၍မရပါ။ အခြားဘဏ်ကို ရွေးပါ သို့မဟုတ် ခဏစောင့်ပြီး ပြန်လည်ကြိုးစားပါ။";
+
+// Hold this shared lock only for the short reservation transaction. Turning a
+// bank off waits for reservations already accepted, never for a payment API call.
+export async function lockBankAvailability(client, serviceType) {
+  const result = await client.query(
+    "select is_enabled from public.deposit_bank_settings where service_type = $1 for share", [serviceType],
+  );
+  if (result.rows.length !== 1 || typeof result.rows[0].is_enabled !== "boolean") throw new Error("Bank settings are unavailable");
+  return result.rows[0].is_enabled;
+}
 
 export async function readDepositBanks(pool = getPool()) {
   const result = await pool.query("select service_type, is_enabled, updated_at from public.deposit_bank_settings");

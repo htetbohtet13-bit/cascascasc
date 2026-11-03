@@ -1,4 +1,4 @@
--- Deposit availability only. Existing balances, orders and withdrawals are unchanged.
+-- Shared bank availability for deposits and withdrawals. No balances or orders change.
 begin;
 
 create table if not exists public.deposit_bank_settings (

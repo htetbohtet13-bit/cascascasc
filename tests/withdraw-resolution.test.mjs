@@ -33,7 +33,7 @@ before(async () => {
   mock.method(globalThis, 'fetch', async () => { paymentCalls++; throw new Error('Admin review must not send bank transfers'); });
   for (const file of ['001_app_schema.sql', '002_phone_auth.sql', '005_skm_seamless_wallet.sql', '006_game_display_settings.sql',
     '008_deposit_wagering.sql', '009_auth_security.sql', '010_money_constraints.sql', '012_game_minor_units.sql',
-    '013_first_deposit_bonus.sql', '015_withdrawal_resolution.sql']) await migrate(file);
+    '013_first_deposit_bonus.sql', '015_withdrawal_resolution.sql', '016_deposit_bank_settings.sql']) await migrate(file);
 });
 beforeEach(async () => {
   fault = undefined; rateError = null; logs.length = 0; paymentCalls = 0;

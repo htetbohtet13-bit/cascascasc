@@ -4769,6 +4769,10 @@
 .deposit-bank-card.is-unavailable { border-color: #ddcdb4; background: #f2ecdf; box-shadow: none; color: #84765f; cursor: not-allowed; }
 .deposit-bank-card.is-unavailable img { filter: grayscale(.8); opacity: .65; }
 .deposit-bank-card.is-unavailable small { font-size: 10px; line-height: 1.8; color: #926647; }
+.bank-card.is-unavailable { border-color: #ddcdb4; background: #f2ecdf; box-shadow: none; color: #84765f; cursor: not-allowed; }
+.bank-card.is-unavailable img { filter: grayscale(.8); opacity: .65; }
+.bank-card.is-unavailable small { display: block; width: 100%; margin-top: 4px; font-size: 10px; font-weight: 500; line-height: 1.8; text-align: center; color: #926647; }
+.wallet-center .wallet-sheet.wallet-embedded .bank-card.is-unavailable { flex-wrap: wrap; justify-content: center; gap: 6px; }
 .admin-deposit-banks { margin-bottom: 18px; padding: 16px; border: 1px solid var(--ui-line); border-radius: 14px; background: var(--ui-surface); }
 .admin-bank-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .admin-bank-heading h2 { margin: 0; font-size: 15px; }

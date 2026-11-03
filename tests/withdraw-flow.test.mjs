@@ -30,7 +30,7 @@ function text(tree) {
 const response = (payload, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => payload });
 const flush = () => new Promise(setImmediate);
 
-function harness(payout = () => response({ ok: true, state: "paid", balance: 94000, message: "Transfer Successful" }), overrides = {}) {
+function harness(payout = () => response({ ok: true, state: "paid", balance: 94000, message: "Transfer Successful" }), overrides = {}, enabled = { kbzpay: true, wavepay: true }) {
   const states = [];
   const calls = [];
   const balances = [];
@@ -56,7 +56,7 @@ function harness(payout = () => response({ ok: true, state: "paid", balance: 940
   const api = {};
   runInNewContext(walletCode, { exports: api, fetch: async (url, options) => {
     calls.push({ url, options });
-    if (url === "/api/wallet/config") return response({ kbzpay: { receiver: "09900000000" }, wavepay: { receiver: "09900000001" } });
+    if (url === "/api/wallet/config") return response({ kbzpay: { receiver: "09900000000", enabled: enabled.kbzpay }, wavepay: { receiver: "09900000001", enabled: enabled.wavepay } });
     assert.equal(url, "/api/wallet/withdraw");
     return payout(url, options);
   } });
@@ -88,14 +88,15 @@ function harness(payout = () => response({ ok: true, state: "paid", balance: 940
     await flush();
   };
   const choose = (method) => element((node) => node.type === "button" && node.props.className?.split(" ").includes(method)).props.onClick();
-  const toAccount = async (method = "kbz", amount = "5000") => { choose(method); input("withdraw-amount", amount); await submit(); };
+  const load = async () => { effects[0](); await flush(); };
+  const toAccount = async (method = "kbz", amount = "5000") => { await load(); choose(method); input("withdraw-amount", amount); await submit(); };
   const toPreview = async (name = "Display name only", phone = "09123456789") => {
     await toAccount(); input("withdraw-name", name); input("withdraw-phone", phone); await submit();
   };
   render();
   return { render, props, input, field, button, choose, submit, toAccount, toPreview, calls, balances,
     payoutCalls: () => calls.filter((call) => call.url === "/api/wallet/withdraw"), closed: () => closed,
-    async load() { effects[0](); await flush(); } };
+    load };
 }
 
 test("withdrawal starts with balance, banks and amount; neither Next step sends a payout", async () => {
@@ -123,6 +124,7 @@ test("withdrawal starts with balance, banks and amount; neither Next step sends 
 
 test("invalid bank, amounts, empty names and invalid recipient numbers cannot advance or send money", async () => {
   const app = harness();
+  await app.load();
   app.input("withdraw-amount", "5000");
   await app.submit();
   assert.ok(app.field("withdraw-amount"));
@@ -142,6 +144,26 @@ test("invalid bank, amounts, empty names and invalid recipient numbers cannot ad
     assert.equal(app.field("withdraw-phone").props.value, phone);
     assert.equal(app.payoutCalls().length, 0);
   }
+});
+
+test("withdrawal banks wait for configuration and show a Burmese unavailable label when paused", async () => {
+  const app = harness(undefined, {}, { kbzpay: false, wavepay: true });
+  assert.equal(find(app.render(), node => node.props?.className?.split(" ").includes("kbz")).props.disabled, true);
+  await app.load();
+  const paused = find(app.render(), node => node.type === "button" && node.props.className?.split(" ").includes("kbz"));
+  assert.equal(paused.props.disabled, true); assert.match(text(paused), /ယာယီအသုံးပြု၍မရပါ/);
+  app.choose("kbz"); app.input("withdraw-amount", "5000"); await app.submit();
+  assert.ok(app.field("withdraw-amount")); assert.equal(app.payoutCalls().length, 0);
+  await app.toAccount("wave"); assert.ok(app.field("withdraw-name"));
+});
+
+test("a bank paused after preview keeps the withdrawal unsent and displays its availability error", async () => {
+  const message = "ဤဘဏ်ကို ယာယီအသုံးပြု၍မရပါ။ အခြားဘဏ်ကို ရွေးပါ။";
+  const app = harness(() => response({ error: message, code: "BANK_UNAVAILABLE" }, 409));
+  await app.toPreview(); await app.submit();
+  assert.ok(text(app.render()).includes(message)); assert.deepEqual(app.balances, []);
+  assert.equal(app.button("ပြန်လည်ကြိုးစားမည်"), null);
+  assert.ok(app.button("ပြင်မည်"));
 });
 
 test("editing a preview preserves fields and only the latest bank, amount and phone reach the real request builder", async () => {

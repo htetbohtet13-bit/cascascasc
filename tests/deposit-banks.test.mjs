@@ -105,18 +105,53 @@ test("bank lookup failures and missing configuration rows fail closed without co
   await player(); const fetch = t.mock.method(globalThis, "fetch", async () => { throw new Error("No verification allowed"); });
   queryFault = sql => { if (sql.includes("from public.deposit_bank_settings")) throw new Error("Test outage"); };
   assert.equal((await deposit()).body.code, "BANK_STATUS_UNAVAILABLE");
+  assert.equal((await proxy("wallet-withdraw", { service_type: "kbzpay", amount: 1000, phone: "09123456789", request_id: randomUUID() })).status, 500);
   queryFault = undefined;
   await db.query("delete from public.deposit_bank_settings where service_type='wavepay'");
   assert.equal((await deposit()).body.code, "BANK_STATUS_UNAVAILABLE");
+  assert.equal((await proxy("wallet-withdraw", { service_type: "wavepay", amount: 1000, phone: "09123456789", request_id: randomUUID() })).status, 500);
   assert.equal(fetch.mock.callCount(), 0);
+  assert.equal((await db.query("select count(*)::int as n from public.withdrawals")).rows[0].n, 0);
   await migration("016_deposit_bank_settings.sql");
 });
 
-test("migration reruns preserve paused settings and money; bank pause does not block withdrawal reservations", async () => {
+test("migration reruns preserve paused settings and money; paused banks block new withdrawal reservations", async () => {
   const id = await player(10000); const cookie = await login(); await set(cookie, "kbzpay", false);
   await migration("016_deposit_bank_settings.sql");
   assert.equal((await readDepositBanks()).kbzpay.enabled, false);
   assert.equal((await db.query("select balance::text from public.profiles where id=$1", [id])).rows[0].balance, "10000");
   const result = await reserveWithdraw({ userId: id, amount: 1000, serviceType: "kbzpay", phone: "09123456789", orderId: randomUUID() });
-  assert.equal(result.state, "reserved");
+  assert.equal(result.ok, false); assert.equal(result.code, "BANK_UNAVAILABLE");
+  assert.equal((await db.query("select balance::text from public.profiles where id=$1", [id])).rows[0].balance, "10000");
+  assert.equal((await db.query("select count(*)::int as n from public.withdrawals")).rows[0].n, 0);
+  await set(cookie, "kbzpay", true);
+  assert.equal((await reserveWithdraw({ userId: id, amount: 1000, serviceType: "kbzpay", phone: "09123456789", orderId: randomUUID() })).state, "reserved");
+});
+
+test("both bank switches block deposit and withdrawal APIs before deductions or gateway calls", async (t) => {
+  const id = await player(10000); const cookie = await login();
+  const fetch = t.mock.method(globalThis, "fetch", async () => { throw new Error("No gateway call for a paused bank"); });
+  for (const service_type of ["kbzpay", "wavepay"]) {
+    await set(cookie, service_type, false);
+    assert.equal((await deposit({ service_type })).body.code, "BANK_UNAVAILABLE");
+    const result = await proxy("wallet-withdraw", { service_type, amount: 1000, phone: "09123456789", request_id: randomUUID(), enabled: true });
+    assert.equal(result.status, 409); assert.equal(result.body.code, "BANK_UNAVAILABLE"); assert.match(result.body.error, /ယာယီ/);
+  }
+  assert.equal(fetch.mock.callCount(), 0);
+  assert.equal((await db.query("select balance::text from public.profiles where id=$1", [id])).rows[0].balance, "10000");
+  assert.equal((await db.query("select count(*)::int as n from public.withdrawals")).rows[0].n, 0);
+});
+
+test("a payout accepted before a bank pause finishes once; paid replays still return success while paused", async (t) => {
+  await player(10000); const cookie = await login(); let enter; let finish;
+  const entered = new Promise(resolve => { enter=resolve; });
+  const fetch = t.mock.method(globalThis, "fetch", () => { enter(); return new Promise(resolve => { finish=resolve; }); });
+  const payload = { service_type: "kbzpay", amount: 1000, phone: "09123456789", request_id: randomUUID() };
+  const pending = proxy("wallet-withdraw", payload); await entered;
+  await set(cookie, "kbzpay", false);
+  finish(new Response(JSON.stringify({ success: true, message: "transfer_success", data: { transaction_id: "test-switch-payout", amount: 1000, recipient: payload.phone, provider: "kbzpay", currency: "MMK", status: "success" } })));
+  const paid = await pending; assert.equal(paid.body.state, "paid"); assert.equal(paid.body.balance, 9000);
+  assert.equal((await proxy("wallet-withdraw", payload)).body.state, "paid");
+  assert.equal((await proxy("wallet-withdraw", { ...payload, request_id: randomUUID() })).body.code, "BANK_UNAVAILABLE");
+  assert.equal(fetch.mock.callCount(), 1);
 });

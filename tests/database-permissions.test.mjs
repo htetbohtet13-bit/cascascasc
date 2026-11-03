@@ -4,6 +4,7 @@ import { after, before, test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { adminGameHistory, playerGameHistory } from "../server/game-history.mjs";
 import { depositBonusEligibility } from "../server/deposit-bonus.mjs";
+import { lockBankAvailability } from "../server/deposit-banks.mjs";
 
 const db = new PGlite();
 async function migration(name) {
@@ -25,6 +26,7 @@ test("bank settings allow runtime reads and state updates without inserting, del
     try {
       assert.equal((await db.query("select count(*)::int as n from public.deposit_bank_settings")).rows[0].n, 2);
       await db.query("update public.deposit_bank_settings set is_enabled=false, updated_at=clock_timestamp() where service_type='kbzpay'");
+      assert.equal(await lockBankAvailability(db, "kbzpay"), false);
       for (const sql of ["delete from public.deposit_bank_settings", "update public.deposit_bank_settings set service_type=service_type", "insert into public.deposit_bank_settings(service_type) values('kbzpay')"]) {
         await assert.rejects(() => db.query(sql), error => error.code === "42501");
       }

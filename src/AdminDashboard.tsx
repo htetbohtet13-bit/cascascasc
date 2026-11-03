@@ -327,7 +327,7 @@ export default function AdminDashboard() {
           <div className="admin-page-content"><ProviderGames games={(data as Payload).games ?? []} loading={loading} settingsConfigured={(data as Payload).settingsConfigured !== false} onSaved={() => setRefreshKey((value) => value + 1)} /></div>
         ) : (
           <div className="admin-page-content">
-            {section === "deposits" ? <DepositBankControls /> : null}
+            {section === "deposits" || section === "withdrawals" ? <DepositBankControls /> : null}
             <div className="admin-list-toolbar">
               <label className="admin-search"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder={section === "users" ? "Search phone or player ID" : "Search player, round, or reference"} /></label>
               {(section === "deposits" || section === "withdrawals") ? (

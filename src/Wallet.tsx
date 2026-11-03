@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { loadWalletMethods, submitWithdraw, WalletRequestError, type PayMethod } from "./lib/wallet";
+import { loadWalletMethods, submitWithdraw, WalletRequestError, type PayMethod, type WalletMethods } from "./lib/wallet";
 import PaymentResult from "./PaymentResult";
 
 type Props = {
@@ -46,6 +46,8 @@ export default function Wallet({
   const [doneState, setDoneState] = useState<"paid" | "pending" | "failed">("paid");
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const submitting = useRef(false);
+  const [bankConfig, setBankConfig] = useState<WalletMethods | null>(null);
+  const [loadingBanks, setLoadingBanks] = useState(true);
   const bank = methods.find((item) => item.id === method);
   const numericAmount = Number(amount);
 
@@ -54,12 +56,19 @@ export default function Wallet({
   }, [busy, step, onFullscreenChange]);
 
   useEffect(() => {
-    loadWalletMethods().catch(() =>
-      setError("ငွေပေးချေမှုနည်းလမ်းများကို ဖွင့်မရပါ။ ခဏစောင့်ပြီး ပြန်လည်ကြိုးစားပါ။"),
-    );
+    let active = true;
+    loadWalletMethods()
+      .then(config => { if (active) setBankConfig(config); })
+      .catch(() => { if (active) setError("ငွေပေးချေမှုနည်းလမ်းများကို ဖွင့်မရပါ။ ခဏစောင့်ပြီး ပြန်လည်ကြိုးစားပါ။"); })
+      .finally(() => { if (active) setLoadingBanks(false); });
+    return () => { active = false; };
   }, []);
 
   function chooseMethod(next: PayMethod) {
+    if (bankConfig?.[next]?.enabled !== true) {
+      setError("ဤဘဏ်ကို ယာယီအသုံးပြု၍မရပါ။ အခြားဘဏ်ကို ရွေးပါ။");
+      return;
+    }
     setMethod(next);
     setError("");
     setDone("");
@@ -68,6 +77,10 @@ export default function Wallet({
   function validateAmount() {
     if (!method) {
       setError("KBZPay သို့မဟုတ် WavePay ကို ရွေးပါ။");
+      return false;
+    }
+    if (bankConfig?.[method]?.enabled !== true) {
+      setError("ဤဘဏ်ကို ယာယီအသုံးပြု၍မရပါ။ အခြားဘဏ်ကို ရွေးပါ။");
       return false;
     }
     if (!Number.isSafeInteger(numericAmount) || numericAmount <= 0) {
@@ -158,12 +171,14 @@ export default function Wallet({
                 <button
                   key={item.id}
                   type="button"
-                  className={`bank-card ${item.cls}${method === item.id ? " selected" : ""}`}
+                  className={`bank-card ${item.cls}${method === item.id ? " selected" : ""}${bankConfig?.[item.id]?.enabled !== true ? " is-unavailable" : ""}`}
+                  disabled={bankConfig?.[item.id]?.enabled !== true}
                   onClick={() => chooseMethod(item.id)}
                   aria-pressed={method === item.id}
                 >
                   <img src={item.img} alt="" />
                   <span>{item.name}</span>
+                  {bankConfig?.[item.id]?.enabled !== true ? <small>{loadingBanks ? "စစ်ဆေးနေသည်…" : "ယာယီအသုံးပြု၍မရပါ"}</small> : null}
                   {method === item.id ? <span className="withdraw-bank-check" aria-hidden="true">✓</span> : null}
                 </button>
               ))}

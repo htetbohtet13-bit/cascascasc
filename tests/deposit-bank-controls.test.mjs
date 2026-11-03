@@ -24,7 +24,7 @@ function harness(fetcher) {
   runInNewContext(code, { exports, Error, require: name => name === "react" ? react : {jsx,jsxs:jsx}, fetch: async (...args) => { calls.push(args); return fetcher(...args); } });
   const render = () => { cursor=0; effectCursor=0; return exports.default(); };
   const settle = async () => { for(let i=0;i<4;i++){render();for(const e of effects) if(e.pending){e.pending=false;e.fn();}await new Promise(setImmediate);} };
-  return {render,settle,calls, toggle: bank => find(render(),node => node.props?.role === "switch" && node.props["aria-label"] === `${bank} top-ups`), refresh: () => find(render(),node => node.type === "button" && text(node) === "Refresh")};
+  return {render,settle,calls, toggle: bank => find(render(),node => node.props?.role === "switch" && node.props["aria-label"] === `${bank} deposits and withdrawals`), refresh: () => find(render(),node => node.type === "button" && text(node) === "Refresh")};
 }
 
 test("bank controls read confirmed state, save an explicit value once and update only after acknowledgement", async () => {

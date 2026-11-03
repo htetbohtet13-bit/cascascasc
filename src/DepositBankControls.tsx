@@ -53,13 +53,13 @@ export default function DepositBankControls() {
   useEffect(() => { void request(); return () => { version.current++; sending.current = false; }; }, []);
 
   return (
-    <section className="admin-deposit-banks" aria-label="Top-up banks" aria-busy={busy !== ""}>
-      <div className="admin-bank-heading"><h2>Top-up banks</h2><button type="button" onClick={() => void request()} disabled={busy !== ""}>Refresh</button></div>
+    <section className="admin-deposit-banks" aria-label="Bank availability" aria-busy={busy !== ""}>
+      <div className="admin-bank-heading"><h2>Bank availability</h2><button type="button" onClick={() => void request()} disabled={busy !== ""}>Refresh</button></div>
       <div className="admin-bank-grid">
         {BANKS.map((bank) => (
           <div className="admin-bank-row" key={bank.id}>
             <img src={bank.image} alt="" /><strong>{bank.label}</strong>
-            <button type="button" role="switch" aria-label={`${bank.label} top-ups`} aria-checked={banks?.[bank.id].enabled ?? false}
+            <button type="button" role="switch" aria-label={`${bank.label} deposits and withdrawals`} aria-checked={banks?.[bank.id].enabled ?? false}
               className={`admin-bank-switch ${banks ? banks[bank.id].enabled ? "on" : "off" : "unknown"}`}
               disabled={!banks || busy !== ""} onClick={() => void request(bank.id)}>
               <span aria-hidden="true" />{busy === bank.id ? "Saving…" : banks ? banks[bank.id].enabled ? "On" : "Off" : "—"}
@@ -67,7 +67,7 @@ export default function DepositBankControls() {
           </div>
         ))}
       </div>
-      <p>Changes apply to top-ups only.</p>
+      <p>Off pauses both deposits and withdrawals for this bank.</p>
       {error ? <div className="admin-error" role="alert">{error}</div> : null}
     </section>
   );

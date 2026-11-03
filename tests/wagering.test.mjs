@@ -42,6 +42,7 @@ before(async () => {
   await migration("008_deposit_wagering.sql");
   await migration("012_game_minor_units.sql");
   await migration("013_first_deposit_bonus.sql");
+  await migration("016_deposit_bank_settings.sql");
 });
 beforeEach(async () => {
   await db.exec("insert into public.deposit_bonus_campaign(singleton,starts_at) values(true,'infinity') on conflict(singleton) do update set starts_at=excluded.starts_at");
