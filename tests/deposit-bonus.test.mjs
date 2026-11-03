@@ -35,7 +35,7 @@ async function migration(name) {
   await db.exec((await readFile(new URL(`../neon/${name}`, import.meta.url), "utf8")).replace("create extension if not exists pgcrypto;", ""));
 }
 before(async () => {
-  for (const name of ["001_app_schema.sql", "002_phone_auth.sql", "005_skm_seamless_wallet.sql", "006_game_display_settings.sql", "008_deposit_wagering.sql", "009_auth_security.sql", "010_money_constraints.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql"]) await migration(name);
+  for (const name of ["001_app_schema.sql", "002_phone_auth.sql", "005_skm_seamless_wallet.sql", "006_game_display_settings.sql", "008_deposit_wagering.sql", "009_auth_security.sql", "010_money_constraints.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql", "016_deposit_bank_settings.sql"]) await migration(name);
   for (const key of envKeys) delete process.env[key];
   process.env.admin_secret = "test-bonus-admin";
   process.env.ADMIN_MFA_REQUIRED = "false";

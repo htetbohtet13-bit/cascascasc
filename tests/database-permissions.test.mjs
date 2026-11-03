@@ -14,9 +14,23 @@ async function migration(name) {
 before(async () => {
   for (const name of ["001_app_schema.sql", "002_phone_auth.sql", "005_skm_seamless_wallet.sql",
     "006_game_display_settings.sql", "007_game_hot_setting.sql", "008_deposit_wagering.sql",
-    "009_auth_security.sql", "010_money_constraints.sql", "011_runtime_role.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql", "014_game_player_ranges.sql", "015_withdrawal_resolution.sql"]) await migration(name);
+    "009_auth_security.sql", "010_money_constraints.sql", "011_runtime_role.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql", "014_game_player_ranges.sql", "015_withdrawal_resolution.sql", "016_deposit_bank_settings.sql"]) await migration(name);
 });
 after(async () => { await db.close(); });
+
+test("bank settings allow runtime reads and state updates without inserting, deleting or renaming banks, even after hardening reruns", async () => {
+  for (let pass = 0; pass < 2; pass++) {
+    if (pass) await migration("011_runtime_role.sql");
+    await db.exec("set role j777_runtime");
+    try {
+      assert.equal((await db.query("select count(*)::int as n from public.deposit_bank_settings")).rows[0].n, 2);
+      await db.query("update public.deposit_bank_settings set is_enabled=false, updated_at=clock_timestamp() where service_type='kbzpay'");
+      for (const sql of ["delete from public.deposit_bank_settings", "update public.deposit_bank_settings set service_type=service_type", "insert into public.deposit_bank_settings(service_type) values('kbzpay')"]) {
+        await assert.rejects(() => db.query(sql), error => error.code === "42501");
+      }
+    } finally { await db.exec("reset role"); }
+  }
+});
 
 test("runtime role has no owner-like attributes or inherited memberships", async () => {
   const { rows } = await db.query("select rolsuper,rolcreatedb,rolcreaterole,rolinherit,rolbypassrls,rolcanlogin from pg_roles where rolname='j777_runtime'");

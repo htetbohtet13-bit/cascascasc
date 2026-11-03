@@ -10,6 +10,7 @@ import { adminGameHistory, playerGameHistory } from "./game-history.mjs";
 import { parsePlayerCount } from "./player-count.mjs";
 import { trustedClientIp } from "./request-security.mjs";
 import { readWithdrawalReview, resolveWithdrawal, withdrawalReviewUnavailable } from "./withdrawal-resolution.mjs";
+import { readDepositBanks, setDepositBank } from "./deposit-banks.mjs";
 
 const PAGE_SIZE = 50;
 const MAX_PAGE = 1_000_000;
@@ -354,6 +355,7 @@ async function adminRequest(req) {
       };
     }
     if (!await validAdminSession(req, sessionKey)) return unauthorized();
+    if (action === "set_deposit_bank") return await setDepositBank(req.body);
     if (action === "resolve_withdrawal") {
       const limited = await consumeRateLimit(req, "admin-withdrawal-resolve", "shared-admin");
       if (limited) return limited;
@@ -380,6 +382,7 @@ async function adminRequest(req) {
   const pool = getPool();
 
   try {
+    if (view === "deposit_banks") return { status: 200, body: { banks: await readDepositBanks(pool) } };
     if (view === "withdrawal") {
       try {
         const review = await readWithdrawalReview(pool, url.searchParams.get("order_id") || "");

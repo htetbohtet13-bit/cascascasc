@@ -4766,6 +4766,26 @@
 .deposit-amount-step .bonus-preview { margin-top: 4px; }
 .deposit-amount-step .bonus-preview dd { margin-top: 2px; line-height: 1.5; }
 .deposit-amount-step .deposit-primary { height: 44px; margin-top: 10px; }
+.deposit-bank-card.is-unavailable { border-color: #ddcdb4; background: #f2ecdf; box-shadow: none; color: #84765f; cursor: not-allowed; }
+.deposit-bank-card.is-unavailable img { filter: grayscale(.8); opacity: .65; }
+.deposit-bank-card.is-unavailable small { font-size: 10px; line-height: 1.8; color: #926647; }
+.admin-deposit-banks { margin-bottom: 18px; padding: 16px; border: 1px solid var(--ui-line); border-radius: 14px; background: var(--ui-surface); }
+.admin-bank-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.admin-bank-heading h2 { margin: 0; font-size: 15px; }
+.admin-bank-heading > button { padding: 6px 10px; border: 1px solid var(--ui-line); border-radius: 8px; background: #fff9ed; color: var(--ui-muted); font: inherit; font-size: 11px; cursor: pointer; }
+.admin-bank-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.admin-bank-row { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 12px; border: 1px solid var(--ui-line); border-radius: 10px; }
+.admin-bank-row img { width: 36px; height: 36px; border-radius: 9px; object-fit: contain; }
+.admin-bank-row strong { flex: 1; font-size: 13px; }
+.admin-bank-switch { display: flex; align-items: center; justify-content: center; gap: 7px; min-width: 72px; min-height: 40px; padding: 7px 11px; border: 1px solid; border-radius: 20px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.admin-bank-switch span { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.admin-bank-switch.on { border-color: #b5d8bc; background: #eaf5ed; color: #236c3c; }
+.admin-bank-switch.off { border-color: #e3b9ae; background: #fbeee9; color: #a3412d; }
+.admin-bank-switch.unknown { border-color: #dfd5c3; background: #f3eee4; color: #8a7d66; }
+.admin-bank-switch:disabled, .admin-bank-heading > button:disabled { opacity: .6; cursor: wait; }
+.admin-bank-switch:focus-visible, .admin-bank-heading > button:focus-visible { outline: 2px solid #aa7c22; outline-offset: 3px; }
+.admin-deposit-banks > p { margin: 10px 0 0; color: var(--ui-muted); font-size: 11px; }
+@media (max-width: 600px) { .admin-bank-grid { grid-template-columns: 1fr; } }
 @media (max-height: 620px) {
   .deposit-scroll.is-amount,
   .wallet-center .deposit-flow.wallet-embedded .deposit-scroll.is-amount { padding-top: 4px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }

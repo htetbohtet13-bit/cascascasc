@@ -159,6 +159,10 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
 
   function chooseBank(next: PayMethod) {
     const accountDetails = config?.[next];
+    if (accountDetails?.enabled !== true) {
+      setMessage("ဤဘဏ်ဖြင့် ငွေသွင်းခြင်းကို ယာယီအသုံးပြု၍မရပါ။ အခြားဘဏ်ကို ရွေးပါ။");
+      return;
+    }
     if (!accountDetails?.receiver?.trim() || !accountDetails?.name?.trim()) {
       setMessage("ငွေလက်ခံအကောင့် အချက်အလက် မရှိသေးပါ။ ကျေးဇူးပြု၍ အကူအညီကို ဆက်သွယ်ပါ။");
       return;
@@ -169,6 +173,10 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
   }
 
   function continueFromAmount() {
+    if (!method || config?.[method]?.enabled !== true) {
+      setMessage("ဤဘဏ်ဖြင့် ငွေသွင်းခြင်းကို ယာယီအသုံးပြု၍မရပါ။ အခြားဘဏ်ကို ရွေးပါ။");
+      return;
+    }
     if (!promotion) {
       setMessage("ငွေသွင်းစည်းကမ်းများကို ဖွင့်မရသေးပါ။ စာမျက်နှာကို ပြန်လည်ဖွင့်ပါ။");
       return;
@@ -293,11 +301,13 @@ export default function DepositFlow({ embedded = false, onFullscreenChange, onHi
                   <button
                     key={item.id}
                     type="button"
-                    className={`deposit-bank-card ${item.cls}`}
+                    className={`deposit-bank-card ${item.cls}${config?.[item.id]?.enabled !== true ? " is-unavailable" : ""}`}
+                    disabled={config?.[item.id]?.enabled !== true}
                     onClick={() => chooseBank(item.id)}
                   >
                     <img src={item.img} alt="" />
                     <span>{item.label}</span>
+                    {config?.[item.id]?.enabled !== true ? <small>ယာယီအသုံးပြု၍မရပါ</small> : null}
                   </button>
                 ))}
               </div>

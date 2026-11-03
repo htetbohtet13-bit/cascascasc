@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { currentSession } from "./auth.mjs";
 import { paymentConfig } from "./payment-env.mjs";
+import { BANK_UNAVAILABLE_MESSAGE, readDepositBanks } from "./deposit-banks.mjs";
 import { unsafeRequestError } from "./request-security.mjs";
 import { consumeRateLimit } from "./rate-limit.mjs";
 import { BONUS_MIN_DEPOSIT, depositBonusEligibility } from "./deposit-bonus.mjs";
@@ -103,6 +104,14 @@ export async function handleWalletProxy({ req, functionName, method = "POST", pa
       if (!/^\d{6}$/.test(transactionId)) return { status: 400, body: { error: "Enter the last 6 digits" } };
       const receiver = serviceType === "kbzpay" ? config.kbzReceiver : config.waveReceiver;
       if (!config.apiKey || !receiver) return { status: 500, body: { error: "Payment is not configured" } };
+      try {
+        const banks = await readDepositBanks();
+        if (!banks[serviceType].enabled) return failure(409, "BANK_UNAVAILABLE", BANK_UNAVAILABLE_MESSAGE);
+      } catch {
+        return failure(503, "BANK_STATUS_UNAVAILABLE", "ဘဏ်အခြေအနေကို စစ်ဆေး၍မရသေးပါ။ ခဏစောင့်ပြီး ပြန်လည်ကြိုးစားပါ။");
+      }
+      // An admin pause stops new verifications. Once verification starts, finish
+      // its normal credit path even if the bank is paused while the API responds.
       const limited = await consumeRateLimit(req, "deposit-verify", userId);
       if (limited) return limited;
       // Old cached forms did not disclose bonus wagering. Refresh them before

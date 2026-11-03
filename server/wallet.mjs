@@ -4,6 +4,7 @@ import { wageringMessage, wageringTracker } from "./wagering.mjs";
 import { addMoney, money, moneyNumber, positiveMoney, subtractMoney } from "./money.mjs";
 import { payoutPolicy, payoutBlocked, checkPayoutLimits } from "./payout-security.mjs";
 import { BONUS_MIN_DEPOSIT, BONUS_MULTIPLIER, DEPOSIT_BONUS, depositBonusEligibility, depositCreditDetails } from "./deposit-bonus.mjs";
+import { readDepositBanks } from "./deposit-banks.mjs";
 
 // Use one lock order across deposits, reservations, refunds and completions.
 async function lockedProfile(client, userId) {
@@ -14,9 +15,10 @@ async function lockedProfile(client, userId) {
 
 export async function walletMethods(userId) {
   const config = paymentConfig();
+  const banks = await readDepositBanks();
   return {
-    kbzpay: { label: "KBZPay", receiver: config.kbzReceiver, name: config.kbzName },
-    wavepay: { label: "WavePay", receiver: config.waveReceiver, name: config.waveName },
+    kbzpay: { label: "KBZPay", receiver: banks.kbzpay.enabled ? config.kbzReceiver : "", name: banks.kbzpay.enabled ? config.kbzName : "", enabled: banks.kbzpay.enabled },
+    wavepay: { label: "WavePay", receiver: banks.wavepay.enabled ? config.waveReceiver : "", name: banks.wavepay.enabled ? config.waveName : "", enabled: banks.wavepay.enabled },
     promotion: await depositBonusEligibility(getPool(), userId),
   };
 }

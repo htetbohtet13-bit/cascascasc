@@ -60,6 +60,14 @@ test("known rejected verification replies retain a Burmese error rather than cla
   });
 });
 
+test("a paused bank rejection displays the Burmese availability message instead of an unconfirmed payment", async () => {
+  const api = walletLibrary(async () => reply({ error: "ဤဘဏ်ကို ယာယီအသုံးပြု၍မရပါ။", code: "BANK_UNAVAILABLE" }, 409));
+  await assert.rejects(() => api.submitDeposit("kbzpay", 1000, "123456"), error => {
+    assert.ok(!(error instanceof api.DepositVerificationPendingError));
+    assert.match(error.message, /ယာယီ/); return true;
+  });
+});
+
 function find(tree, predicate) {
   if (!tree || typeof tree !== "object") return null;
   if (Array.isArray(tree)) {
@@ -74,7 +82,7 @@ function text(tree) {
   return tree && typeof tree === "object" ? text(tree.props?.children) : "";
 }
 
-function componentHarness(depositReply, promotion = { eligible: false, bonus: 5000, minimum: 5000, multiplier: 30 }, initialAmount) {
+function componentHarness(depositReply, promotion = { eligible: false, bonus: 5000, minimum: 5000, multiplier: 30 }, initialAmount, enabled = { kbzpay: true, wavepay: true }) {
   const states = [];
   const effects = [];
   const timers = new Map();
@@ -107,7 +115,7 @@ function componentHarness(depositReply, promotion = { eligible: false, bonus: 50
   };
   const api = walletLibrary(async (url, options) => {
     calls.push({ url, options });
-    if (url === "/api/wallet/config") return reply({ promotion, kbzpay: { receiver: "09900000000", name: "Test receiver" }, wavepay: { receiver: "09900000001", name: "Test receiver" } });
+    if (url === "/api/wallet/config") return reply({ promotion, kbzpay: { receiver: "09900000000", name: "Test receiver", enabled: enabled.kbzpay }, wavepay: { receiver: "09900000001", name: "Test receiver", enabled: enabled.wavepay } });
     assert.equal(url, "/api/wallet/deposit");
     return depositReply();
   });
@@ -249,4 +257,17 @@ test("unavailable promotion terms cannot advance the player to payment", async (
   await app.toAmount("5000"); app.button("ရှေ့ဆက်မည်").props.onClick(); await app.settle();
   assert.ok(text(app.render()).includes("ငွေသွင်းစည်းကမ်းများကို ဖွင့်မရသေးပါ"));
   assert.ok(!find(app.render(), (node) => node.props?.className === "deposit-directing"));
+});
+
+test("paused top-up banks display a Burmese unavailable label and cannot advance; the other bank stays usable", async () => {
+  const app = componentHarness(() => { throw new Error("No payment expected"); }, undefined, undefined, { kbzpay: false, wavepay: true });
+  await app.settle();
+  const paused = find(app.render(), node => node.type === "button" && node.props.className.includes("deposit-bank-card kbz"));
+  assert.equal(paused.props.disabled, true); assert.match(text(paused), /ယာယီအသုံးပြု၍မရပါ/);
+  paused.props.onClick();
+  assert.ok(!find(app.render(), node => node.props?.className === "deposit-section deposit-amount-step"));
+  const wave = find(app.render(), node => node.type === "button" && node.props.className === "deposit-bank-card wave");
+  assert.equal(wave.props.disabled, false); wave.props.onClick();
+  assert.ok(find(app.render(), node => node.props?.className === "deposit-section deposit-amount-step"));
+  assert.equal(app.calls.filter(call => call.url === "/api/wallet/deposit").length, 0);
 });

@@ -62,6 +62,10 @@ do $$ begin
   if to_regclass('public.withdrawal_resolutions') is not null then
     grant select, insert on public.withdrawal_resolutions to j777_runtime;
   end if;
+  if to_regclass('public.deposit_bank_settings') is not null then
+    grant select on public.deposit_bank_settings to j777_runtime;
+    grant update (is_enabled, updated_at) on public.deposit_bank_settings to j777_runtime;
+  end if;
 end $$;
 grant usage on sequence public.wallet_wagering_events_id_seq to j777_runtime;
 

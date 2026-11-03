@@ -1,8 +1,8 @@
 export type PayMethod = "kbzpay" | "wavepay";
 
 export type WalletMethods = {
-  kbzpay: { label: string; receiver: string; name?: string };
-  wavepay: { label: string; receiver: string; name?: string };
+  kbzpay: { label: string; receiver: string; name?: string; enabled: boolean };
+  wavepay: { label: string; receiver: string; name?: string; enabled: boolean };
   promotion: { eligible: boolean; bonus: number; minimum: number; multiplier: number };
 };
 
