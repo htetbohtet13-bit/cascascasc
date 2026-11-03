@@ -29,7 +29,9 @@ export const GAME_ACTIVITY_CTE = `with provider_activity as (
       on w.kind = 'BET' and w.source_id = d.transaction_id and w.user_id = d.user_id
     left join public.skm_wallet_transactions c
       on c.debit_transaction_id = d.transaction_id and c.user_id = d.user_id
-     and c.round_id = d.round_id and c.game_code = d.game_code
+     and (c.round_id = d.round_id
+       or (d.reason = 'BANK_DEPOSIT' and c.kind = 'CREDIT' and c.reason = 'BANK_RETURN'))
+     and c.game_code = d.game_code
      and c.currency = d.currency and c.unit_scale = d.unit_scale and c.status = 'APPLIED'
      and ((c.kind = 'CREDIT' and c.reason = case when d.reason = 'BANK_DEPOSIT' then 'BANK_RETURN' else 'BET_SETTLE' end)
        or (c.kind = 'ROLLBACK' and c.reason = d.reason and c.amount = d.amount))

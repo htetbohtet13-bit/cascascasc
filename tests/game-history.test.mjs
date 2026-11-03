@@ -131,14 +131,34 @@ test("rollback tombstones without an accepted debit never appear as played games
   assert.equal((await history(user)).length, 0); assert.equal(Number((await overview()).summary.bet_count), 0);
 });
 
-test("banker reserves and returns are separate from wager volume and reported wins", async () => {
+test("banker returns from a later round settle history without inflating wager volume or wins", async () => {
   const user = await player(); const debit = bet(user, 500000, { game_code: "shankoemee", reason: "BANK_DEPOSIT" });
-  await play(user, debit, 650000);
+  assert.equal((await call("debit", debit)).status, "OK");
+  const payout = { ...credit(debit, 650000), round_id: randomUUID() };
+  assert.equal((await call("credit", payout)).status, "OK");
+  assert.equal((await call("credit", payout)).status, "DUPLICATE");
   const [row] = await history(user); assert.equal(row.activity_type, "banker"); assert.equal(Number(row.held_amount), 5000);
+  assert.equal(row.status, "settled"); assert.equal(row.round_id, debit.round_id);
+  assert.equal(Number(row.returned_amount), 6500);
+  const admin = await adminHistory(debit.transaction_id);
+  assert.equal(admin.total, 1); assert.equal(admin.bets[0].status, "settled");
   assert.equal(Number(row.bet), 0); assert.equal(row.win, null); assert.equal(Number(row.changemoney), 1500);
   const { summary } = await overview();
   assert.equal(Number(summary.bet_count), 0); assert.equal(Number(summary.bet_total), 0); assert.equal(Number(summary.win_total), 0);
   assert.equal(Number(summary.banker_count), 1); assert.equal(Number(summary.banker_result), 1500);
+});
+
+test("zero bank returns in a later round close the hold and report the full bank loss", async () => {
+  const user = await player();
+  const debit = bet(user, 100000, { game_code: "shankoemee3d", reason: "BANK_DEPOSIT" });
+  assert.equal((await call("debit", debit)).status, "OK");
+  const payout = { ...credit(debit, 0), round_id: randomUUID() };
+  assert.equal((await call("credit", payout)).status, "OK");
+  const [row] = await history(user);
+  assert.equal(row.status, "settled"); assert.equal(Number(row.returned_amount), 0);
+  assert.equal(Number(row.changemoney), -1000); assert.equal(Number(row.bet), 0);
+  const { summary } = await overview();
+  assert.equal(Number(summary.banker_result), -1000); assert.equal(Number(summary.pending_bet_count), 0);
 });
 
 test("minor-unit fractions survive history, while old wallet-unit rows remain unchanged", async () => {

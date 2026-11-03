@@ -30,9 +30,10 @@ beforeEach(async () => {
   await db.exec("truncate public.wallet_wagering_events, public.skm_wallet_transactions, public.skm_game_sessions, public.deposits, public.withdrawals, public.profiles restart identity cascade");
 });
 after(() => db.close());
+let phoneSequence = 123456700;
 async function player(kyat = 1000, fraction = 0) {
   const userId = randomUUID();
-  await db.query("insert into public.profiles(id,phone,balance,balance_minor) values($1,'+959123456789',$2,$3)", [userId, String(kyat), fraction]);
+  await db.query("insert into public.profiles(id,phone,balance,balance_minor) values($1,$2,$3,$4)", [userId, `+959${phoneSequence++}`, String(kyat), fraction]);
   return { userId, ...await createSkmGameSession(userId) };
 }
 const call = (route, payload) => processSkmWalletCallback(route, payload, JSON.stringify(payload));
@@ -112,6 +113,51 @@ test("expired sessions still settle in minor units but cannot start a new bet", 
   assert.equal((await call("debit", debit(user, 1))).status, "TOKEN_EXPIRED");
   assert.equal((await call("credit", credit(bet, 24999))).balance, 114999);
   assert.deepEqual(await stored(user), { balance: "1149", balance_minor: 99 });
+});
+
+test("bank returns close the referenced bank across rounds, including zero returns and late retries", async () => {
+  // Provider incident amounts, with synthetic players, tokens and transaction IDs.
+  for (const [game, held, returned] of [
+    ["shankoemee", 300000, 1320000], ["shankoemee", 100000, 0],
+    ["shankoemee3d", 500000, 1810000], ["shankoemee3d", 100000, 0],
+    ["shankoemee", 300000, 12000], ["bugyee", 100000, 150000],
+  ]) {
+    const user = await player(10000);
+    const bank = debit(user, held, { game_code: game, reason: "BANK_DEPOSIT", bank_id: randomUUID() });
+    assert.equal((await call("debit", bank)).status, "OK");
+    await createSkmGameSession(user.userId);
+    await db.query("update public.skm_game_sessions set expires_at=now()-interval '1 minute' where token_hash=$1", [createHash("sha256").update(user.token).digest("hex")]);
+    const payout = { ...credit(bank, returned), round_id: randomUUID() };
+    const expected = 1000000 - held + returned;
+    assert.equal((await call("rollback", { ...rollback(bank), round_id: payout.round_id })).status, "ERROR");
+    const settled = await call("credit", payout);
+    assert.equal(settled.status, "OK"); assert.equal(settled.balance, expected);
+    const duplicate = await call("credit", payout);
+    assert.equal(duplicate.status, "DUPLICATE"); assert.equal(duplicate.balance, expected);
+    assert.equal((await call("credit", { ...payout, transaction_id: randomUUID() })).status, "ERROR");
+    assert.equal((await call("rollback", rollback(bank))).status, "ERROR");
+    assert.equal((await db.query("select status from public.skm_wallet_transactions where transaction_id=$1", [bank.transaction_id])).rows[0].status, "SETTLED");
+    assert.equal((await db.query("select count(*)::int as count from public.skm_wallet_transactions where debit_transaction_id=$1", [bank.transaction_id])).rows[0].count, 1);
+    const wallet = await stored(user);
+    assert.equal(gameBalance(wallet.balance, wallet.balance_minor), expected);
+  }
+});
+
+test("cross-round bank returns cannot change the player, game, currency, reason or debit reference", async () => {
+  const user = await player(10000); const other = await player(10000);
+  const bank = debit(user, 300000, { game_code: "shankoemee", reason: "BANK_DEPOSIT", bank_id: randomUUID() });
+  assert.equal((await call("debit", bank)).status, "OK");
+  const payout = { ...credit(bank, 1320000), round_id: randomUUID() };
+  for (const change of [
+    { player_id: other.player_id, token: other.token }, { game_code: "bugyee" },
+    { currency: "USD" }, { reason: "BET_SETTLE" }, { debit_transaction_id: randomUUID() },
+    { token: "invalid-token" }, { round_closed: false },
+  ]) {
+    assert.notEqual((await call("credit", { ...payout, ...change })).status, "OK");
+    assert.equal(gameBalance((await stored(user)).balance), 700000);
+    assert.equal(gameBalance((await stored(other)).balance), 1000000);
+  }
+  assert.equal((await call("credit", payout)).status, "OK");
 });
 
 test("deposit, whole-kyat withdrawal and failed-payout refund preserve fractional game winnings", async () => {

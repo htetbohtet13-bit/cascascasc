@@ -241,7 +241,10 @@ async function creditRequest(payload, rawBody) {
     }
     const original = debit.rows[0];
     if (original.unit_scale !== 100) return response("ERROR", player, { message: "Legacy game debit requires reconciliation" });
-    if (original.round_id !== fields.roundId || original.game_code !== fields.gameCode || original.currency !== fields.currency ||
+    // A bank opens in one round and can close several rounds later. Its unique
+    // debit reference identifies the hold; ordinary bet settlements stay round-bound.
+    const bankReturn = original.reason === "BANK_DEPOSIT" && fields.reason === "BANK_RETURN";
+    if ((!bankReturn && original.round_id !== fields.roundId) || original.game_code !== fields.gameCode || original.currency !== fields.currency ||
         (original.reason === "BET_HOLD" ? "BET_SETTLE" : "BANK_RETURN") !== fields.reason) {
       return response("ERROR", player, { message: "Settlement details do not match the debit" });
     }
