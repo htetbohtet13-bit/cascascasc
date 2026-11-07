@@ -2,7 +2,7 @@ import { getPool, withTransaction } from "./neon.mjs";
 import { paymentConfig } from "./payment-env.mjs";
 import { wageringMessage, wageringTracker } from "./wagering.mjs";
 import { addMoney, money, moneyNumber, positiveMoney, subtractMoney } from "./money.mjs";
-import { payoutPolicy, payoutBlocked, checkPayoutLimits } from "./payout-security.mjs";
+import { payoutPolicy, payoutBlocked, checkPayoutLimits, WITHDRAWAL_APPROVAL_THRESHOLD, WITHDRAWAL_DISPLAY_STATUS_SQL } from "./payout-security.mjs";
 import { BONUS_MIN_DEPOSIT, BONUS_MULTIPLIER, DEPOSIT_BONUS, depositBonusEligibility, depositCreditDetails } from "./deposit-bonus.mjs";
 import { BANK_UNAVAILABLE_MESSAGE, lockBankAvailability, readDepositBanks } from "./deposit-banks.mjs";
 
@@ -19,6 +19,7 @@ export async function walletMethods(userId) {
   return {
     kbzpay: { label: "KBZPay", receiver: banks.kbzpay.enabled ? config.kbzReceiver : "", name: banks.kbzpay.enabled ? config.kbzName : "", enabled: banks.kbzpay.enabled },
     wavepay: { label: "WavePay", receiver: banks.wavepay.enabled ? config.waveReceiver : "", name: banks.wavepay.enabled ? config.waveName : "", enabled: banks.wavepay.enabled },
+    withdrawalApprovalThreshold: WITHDRAWAL_APPROVAL_THRESHOLD,
     promotion: await depositBonusEligibility(getPool(), userId),
   };
 }
@@ -28,8 +29,10 @@ export async function walletHistory(userId) {
     `select 'deposit'::text as kind, service_type, amount, bonus_amount, status, message, created_at, completed_at
        from public.deposits where user_id = $1::uuid
      union all
-     select 'withdraw'::text as kind, service_type, amount, 0::bigint as bonus_amount, status, message, created_at, completed_at
-       from public.withdrawals where user_id = $1::uuid
+     select 'withdraw'::text as kind, service_type, amount, 0::bigint as bonus_amount,
+            ${WITHDRAWAL_DISPLAY_STATUS_SQL},
+            message, created_at, completed_at
+       from public.withdrawals w where user_id = $1::uuid
       order by created_at desc
       limit 50`,
     [userId],
@@ -110,7 +113,7 @@ export async function reserveWithdraw({ userId, orderId, serviceType, amount, ph
     const profile = await lockedProfile(client, userId);
     if (!profile.rowCount) return { ok: false, message: "Profile not found" };
     const existingOrder = await client.query(
-      `select user_id, service_type, amount, payout_phone, status
+      `select user_id, service_type, amount, payout_phone, status, approval_state
          from public.withdrawals where order_id = $1 for update`,
       [orderId],
     );
@@ -123,6 +126,8 @@ export async function reserveWithdraw({ userId, orderId, serviceType, amount, ph
       ) return { ok: false, message: "This withdrawal request reference was already used" };
 
       const balance = await currentBalance(client, userId);
+      if (order.approval_state === "awaiting") return { ok: true, state: "awaiting_approval", balance, orderId };
+      if (order.approval_state === "declined") return { ok: true, state: "declined", balance, orderId };
       if (order.status === "paid") return { ok: true, state: "paid", balance, message: "Transfer Successful" };
       if (order.status === "pending") return { ok: true, state: "pending", balance, message: "This withdrawal is still being checked", orderId };
       return { ok: false, state: "failed", balance, message: "This withdrawal was not completed. Please submit it again." };
@@ -173,17 +178,19 @@ export async function reserveWithdraw({ userId, orderId, serviceType, amount, ph
     }
 
     const balance = subtractMoney(availableBalance, amount);
+    const needsApproval = money(amount) > BigInt(WITHDRAWAL_APPROVAL_THRESHOLD);
     await client.query(
       "update public.profiles set balance = $2 where id = $1::uuid",
       [userId, balance],
     );
     await client.query(
       `insert into public.withdrawals
-         (user_id, service_type, order_id, amount, payout_phone, status, message)
-       values ($1::uuid, $2, $3, $4, $5, 'pending', 'Transfer reserved')`,
-      [userId, serviceType, orderId, amount, phone],
+         (user_id, service_type, order_id, amount, payout_phone, status, message, approval_state)
+       values ($1::uuid, $2, $3, $4, $5, 'pending', $6, $7)`,
+      [userId, serviceType, orderId, amount, phone,
+        needsApproval ? "Awaiting admin approval" : "Transfer reserved", needsApproval ? "awaiting" : null],
     );
-    return { ok: true, state: "reserved", balance, orderId };
+    return { ok: true, state: needsApproval ? "awaiting_approval" : "reserved", balance, orderId };
   });
 }
 
@@ -192,7 +199,7 @@ export async function releaseWithdraw({ userId, orderId, message }) {
     const profile = await lockedProfile(client, userId);
     if (!profile.rowCount) return { ok: false, message: "Profile not found" };
     const order = await client.query(
-      `select user_id, amount, status, provider_txn_id from public.withdrawals
+      `select user_id, amount, status, provider_txn_id, approval_state from public.withdrawals
         where order_id = $1 for update`,
       [orderId],
     );
@@ -206,6 +213,7 @@ export async function releaseWithdraw({ userId, orderId, message }) {
       return { ok: false, state: "paid", balance: await currentBalance(client, userId) };
     }
 
+    if (order.rows[0].approval_state === "awaiting") return { ok: false, state: "awaiting_approval" };
     if (order.rows[0].provider_txn_id) return { ok: false, state: "pending", balance: moneyNumber(profile.rows[0].balance), message: "Transfer evidence requires reconciliation" };
     const balance = addMoney(profile.rows[0].balance, positiveMoney(order.rows[0].amount));
 
@@ -229,11 +237,12 @@ export async function recordWithdrawTransfer({ userId, orderId, providerTransact
   return withTransaction(async (client) => {
     if (!(await lockedProfile(client, userId)).rowCount) return false;
     const order = await client.query(
-      `select user_id, status, provider_txn_id from public.withdrawals
+      `select user_id, status, provider_txn_id, approval_state from public.withdrawals
         where order_id = $1 for update`,
       [orderId],
     );
     if (!order.rowCount || order.rows[0].user_id !== userId) return false;
+    if (order.rows[0].approval_state === "awaiting") return false;
     if (order.rows[0].provider_txn_id && order.rows[0].provider_txn_id !== providerTransactionId) return false;
     if (order.rows[0].status === "paid") return true;
     if (order.rows[0].status !== "pending") return false;

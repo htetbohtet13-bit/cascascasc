@@ -4,6 +4,7 @@ export type WalletMethods = {
   kbzpay: { label: string; receiver: string; name?: string; enabled: boolean };
   wavepay: { label: string; receiver: string; name?: string; enabled: boolean };
   promotion: { eligible: boolean; bonus: number; minimum: number; multiplier: number };
+  withdrawalApprovalThreshold: number;
 };
 
 export type WalletHistoryItem = {
@@ -11,7 +12,7 @@ export type WalletHistoryItem = {
   service_type: PayMethod;
   amount: number | string;
   bonus_amount?: number | string;
-  status: "pending" | "verified" | "failed" | "paid";
+  status: "pending" | "verified" | "failed" | "paid" | "awaiting_approval" | "declined";
   message: string | null;
   created_at: string;
   completed_at: string | null;
@@ -98,7 +99,7 @@ export async function submitDeposit(serviceType: PayMethod, amount: number, tran
 
 export type WithdrawResult = {
   ok: boolean;
-  state: "paid" | "pending" | "failed";
+  state: "paid" | "pending" | "failed" | "awaiting_approval" | "declined";
   balance?: number;
   message: string;
   orderId?: string;
@@ -177,6 +178,14 @@ export async function submitWithdraw(
     throw new WalletRequestError(withdrawErrorMessage(payload.error), typeof payload.code === "string" ? payload.code : undefined);
   }
   const safeBalance = typeof payload.balance === "number" && Number.isSafeInteger(payload.balance) && payload.balance >= 0;
+  if (safeBalance && payload.ok === true && (payload.state === "awaiting_approval" || payload.state === "declined")) {
+    return {
+      ok: true, state: payload.state, balance: payload.balance, orderId: payload.orderId,
+      message: payload.state === "awaiting_approval"
+        ? "ငွေထုတ်တောင်းဆိုမှုကို လက်ခံပြီးပါပြီ။ အတည်ပြုချက်ရရှိပြီးမှ ငွေလွှဲပေးပါမည်။ မှတ်တမ်းတွင် အခြေအနေကို ကြည့်နိုင်ပါသည်။"
+        : "ငွေထုတ်တောင်းဆိုမှု ပယ်ချပြီး လက်ကျန်ငွေ ပြန်ဖြည့်ပေးထားပါသည်။",
+    };
+  }
   const paid = payload.state === "paid" && payload.ok === true;
   const failed = payload.state === "failed" && payload.ok === false && payload.safeToRetry === true;
   if (!safeBalance || (!paid && !failed)) return pendingWithdrawal();

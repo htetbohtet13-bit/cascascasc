@@ -3778,11 +3778,11 @@
   color: #43804d;
 }
 
-.wallet-history-status.pending {
+.wallet-history-status.pending, .wallet-history-status.awaiting_approval {
   color: #9b6a12;
 }
 
-.wallet-history-status.failed {
+.wallet-history-status.failed, .wallet-history-status.declined {
   color: #ad4c37;
 }
 
@@ -3966,8 +3966,8 @@
 .admin-player-link:hover, .admin-row-action:hover { text-decoration: underline; }
 .admin-status { display: inline-flex; padding: 4px 7px; border-radius: 20px; background: #f1eadc; color: #756246; font-size: 8px; font-weight: 850; text-transform: uppercase; }
 .admin-status.paid, .admin-status.verified { background: #e8f2e6; color: #487447; }
-.admin-status.pending { background: #fff2d5; color: #99700e; }
-.admin-status.failed { background: #fae9e5; color: #a24e3b; }
+.admin-status.pending, .admin-status.awaiting_approval { background: #fff2d5; color: #99700e; }
+.admin-status.failed, .admin-status.declined { background: #fae9e5; color: #a24e3b; }
 .admin-empty { display: grid; min-height: 95px; place-items: center; border: 1px dashed #dfd4c4; border-radius: 12px; color: #928675; font-size: 11px; }
 .admin-pagination { display: flex; align-items: center; justify-content: space-between; padding: 15px 2px 0; color: #827665; font-size: 10px; }
 .admin-pagination > div { display: flex; gap: 6px; }

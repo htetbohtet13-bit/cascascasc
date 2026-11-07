@@ -10,6 +10,7 @@ import { adminGameHistory, playerGameHistory } from "./game-history.mjs";
 import { parsePlayerCount } from "./player-count.mjs";
 import { trustedClientIp } from "./request-security.mjs";
 import { readWithdrawalReview, resolveWithdrawal, withdrawalReviewUnavailable } from "./withdrawal-resolution.mjs";
+import { WITHDRAWAL_DISPLAY_STATUS_SQL } from "./payout-security.mjs";
 import { readDepositBanks, setDepositBank } from "./deposit-banks.mjs";
 
 const PAGE_SIZE = 50;
@@ -256,6 +257,7 @@ async function bets(pool, url) {
 
 async function walletList(pool, url, kind) {
   const table = kind === "deposit" ? "deposits" : "withdrawals";
+  const displayStatus = kind === "deposit" ? "w.status" : WITHDRAWAL_DISPLAY_STATUS_SQL;
   const { page, limit, offset } = pageParams(url);
   const search = (url.searchParams.get("search") || "").trim().slice(0, 100);
   const status = (url.searchParams.get("status") || "").trim().slice(0, 20);
@@ -263,20 +265,20 @@ async function walletList(pool, url, kind) {
   const params = [search, pattern, status, limit, offset];
   const [list, count] = await Promise.all([
     pool.query(
-      `select w.order_id, w.user_id, p.phone, w.service_type, w.amount, w.status,
+      `select w.order_id, w.user_id, p.phone, w.service_type, w.amount, ${displayStatus} as status,
               w.message, w.created_at, w.completed_at, w.provider_txn_id,
               ${kind === "deposit" ? "w.bonus_amount" : "0::bigint"} as bonus_amount,
               ${kind === "deposit" ? "w.transaction_id" : "w.payout_phone"} as reference
          from public.${table} w join public.profiles p on p.id = w.user_id
         where ($1 = '' or p.phone ilike $2 or p.id::text ilike $2 or w.order_id ilike $2)
-          and ($3 = '' or w.status = $3)
+          and ($3 = '' or ${displayStatus} = $3)
         order by w.created_at desc limit $4 offset $5`,
       params,
     ),
     pool.query(
       `select count(*) as total from public.${table} w join public.profiles p on p.id = w.user_id
         where ($1 = '' or p.phone ilike $2 or p.id::text ilike $2 or w.order_id ilike $2)
-          and ($3 = '' or w.status = $3)`,
+          and ($3 = '' or ${displayStatus} = $3)`,
       params.slice(0, 3),
     ),
   ]);
@@ -289,7 +291,7 @@ async function userDetails(pool, userId) {
     pool.query("select id, phone, balance + balance_minor::numeric / 100 as balance, created_at from public.profiles where id = $1::uuid", [userId]),
     playerGameHistory(pool, userId, 25),
     pool.query("select order_id, service_type, amount, bonus_amount, transaction_id, status, message, created_at, completed_at from public.deposits where user_id = $1::uuid order by created_at desc limit 25", [userId]),
-    pool.query("select order_id, service_type, amount, payout_phone, provider_txn_id, status, message, created_at, completed_at from public.withdrawals where user_id = $1::uuid order by created_at desc limit 25", [userId]),
+    pool.query(`select order_id, service_type, amount, payout_phone, provider_txn_id, ${WITHDRAWAL_DISPLAY_STATUS_SQL} as status, message, created_at, completed_at from public.withdrawals w where user_id = $1::uuid order by created_at desc limit 25`, [userId]),
     pool.query("select order_id, amount, bonus_amount, completed_at, (amount::numeric + bonus_amount) * 30 as wagering_required from public.deposits where user_id = $1::uuid and bonus_amount > 0", [userId]),
   ]);
   if (!profile.rowCount) return { status: 404, body: { error: "User not found" } };

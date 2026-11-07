@@ -51,7 +51,9 @@ function WalletHistory() {
       {items.map((item, index) => {
         const isDeposit = item.kind === "deposit";
         const status =
-          item.status === "paid" || item.status === "verified"
+          item.status === "awaiting_approval" ? "အတည်ပြုချက် စောင့်နေသည်"
+            : item.status === "declined" ? "ပယ်ချပြီး · ငွေပြန်ဖြည့်ပြီး"
+            : item.status === "paid" || item.status === "verified"
             ? "ပြီးပါပြီ"
             : item.status === "failed"
               ? "မအောင်မြင်ပါ"

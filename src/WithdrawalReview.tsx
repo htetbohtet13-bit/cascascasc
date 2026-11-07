@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { formatMoney } from './lib/format-money';
 
-type Decision = 'mark_paid' | 'refund';
+type Decision = 'mark_paid' | 'refund' | 'approve' | 'decline';
 type Resolution = {
   id: string; request_id: string; action: Decision; amount: string; reason: string;
   provider_reference: string | null; created_at: string;
@@ -12,6 +12,7 @@ type Review = {
     order_id: string; phone: string; user_id: string; payout_phone: string;
     service_type: string; amount: string; status: string; provider_txn_id: string | null;
     message: string | null; wallet_balance: string; created_at: string; wait_seconds: number;
+    approval_state?: 'awaiting' | 'approved' | 'declined' | null;
   };
   resolution: Resolution | null; canResolve: boolean; canRefund: boolean; mfaRequired: boolean;
 };
@@ -59,6 +60,7 @@ export default function WithdrawalReview({ orderId, onClose, onResolved, onUnaut
         if (!response.ok) throw new Error(data.error || 'Could not load this withdrawal.');
         if (!validReview(data, orderId)) throw new Error('Could not verify this withdrawal.');
         setReview(data); setReference(data.withdrawal.provider_txn_id ?? '');
+        setDecision(data.withdrawal.approval_state === 'awaiting' ? 'approve' : 'mark_paid');
         setConfirming(false); setChecked(false); setPassword(''); setCode('');
         setUncertain(false); requestId.current = '';
       })
@@ -85,8 +87,12 @@ export default function WithdrawalReview({ orderId, onClose, onResolved, onUnaut
   }, []);
 
   const order = review?.withdrawal;
-  const formValid = Boolean(!loading && review?.canResolve && checked && reason.trim().length >= 10 && reason.trim().length <= 500
-    && (decision === 'refund' ? review.canRefund : /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}$/.test(reference.trim())));
+  const awaitingApproval = order?.approval_state === 'awaiting' && order.status === 'pending';
+  const approvalDecision = decision === 'approve' || decision === 'decline';
+  const formValid = Boolean(!loading && review && (awaitingApproval ? approvalDecision
+    : !approvalDecision && review.canResolve && checked && reason.trim().length >= 10 && reason.trim().length <= 500
+      && (decision === 'refund' ? review.canRefund : /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}$/.test(reference.trim()))));
+  const actionLabel = { approve: 'Approve and send', decline: 'Decline and refund', refund: 'Confirm refund', mark_paid: 'Confirm paid' }[decision];
 
   function continueReview(event: FormEvent) {
     event.preventDefault();
@@ -112,12 +118,17 @@ export default function WithdrawalReview({ orderId, onClose, onResolved, onUnaut
         if (response.status >= 500 || response.status === 409) setUncertain(true);
         setError(data.error || 'Could not confirm this action. Refresh the withdrawal.'); return;
       }
-      if (!validReview(data, orderId) || data.ok !== true || data.resolution?.request_id !== requestId.current
-        || data.resolution.action !== decision || data.resolution.amount !== order.amount
-        || data.withdrawal.status !== (decision === 'refund' ? 'failed' : 'paid')) {
+      if (!validReview(data, orderId) || data.ok !== true || data.withdrawal.amount !== order.amount) {
         throw new Error('Unconfirmed result');
       }
-      setReview(data); setConfirming(false); onResolved();
+      const confirmed = approvalDecision
+        ? data.withdrawal.approval_state === (decision === 'approve' ? 'approved' : 'declined')
+        : data.resolution?.request_id === requestId.current && data.resolution.action === decision
+          && data.resolution.amount === order.amount && data.withdrawal.status === (decision === 'refund' ? 'failed' : 'paid');
+      if (!confirmed) {
+        throw new Error('Unconfirmed result');
+      }
+      setReview(data); setConfirming(false); setDecision('mark_paid'); onResolved();
     } catch {
       setUncertain(true); setError('The result is unconfirmed. Refresh status before taking another action.');
     } finally {
@@ -127,7 +138,7 @@ export default function WithdrawalReview({ orderId, onClose, onResolved, onUnaut
 
   return <div className="withdraw-review-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting.current) onClose(); }}>
     <section className="withdraw-review-dialog" ref={dialog} role="dialog" aria-modal="true" aria-labelledby="withdraw-review-title" aria-busy={busy}>
-      <header><div><small>WITHDRAWAL REVIEW</small><h2 id="withdraw-review-title">{review?.resolution ? 'Resolution recorded' : 'Resolve withdrawal'}</h2></div><button type="button" aria-label="Close review" disabled={busy} onClick={onClose}>×</button></header>
+      <header><div><small>WITHDRAWAL REVIEW</small><h2 id="withdraw-review-title">{review?.resolution ? 'Resolution recorded' : awaitingApproval ? 'Approve or decline withdrawal' : 'Withdrawal details'}</h2></div><button type="button" aria-label="Close review" disabled={busy} onClick={onClose}>×</button></header>
       {loading ? <p role="status">Loading withdrawal…</p> : null}
       {error ? <div className="admin-error" role="alert">{error}</div> : null}
       {order ? <>
@@ -137,8 +148,8 @@ export default function WithdrawalReview({ orderId, onClose, onResolved, onUnaut
           <div><dt>Method / recipient</dt><dd>{order.service_type === 'kbzpay' ? 'KBZPay' : 'WavePay'} · {order.payout_phone}</dd></div>
           <div><dt>Requested (Myanmar)</dt><dd>{date(order.created_at)}</dd></div>
           <div><dt>Order</dt><dd>{order.order_id}</dd></div>
-          <div><dt>Status</dt><dd>{review?.resolution?.action === 'refund' ? 'Refunded to game wallet' : order.status}</dd></div>
-          <div><dt>Provider reference</dt><dd>{order.provider_txn_id || 'Not recorded — payment outcome must be checked'}</dd></div>
+          <div><dt>Status</dt><dd>{order.approval_state === 'declined' ? 'Declined · Refunded' : awaitingApproval ? 'Awaiting approval' : review?.resolution?.action === 'refund' ? 'Refunded to game wallet' : order.approval_state === 'approved' && order.status === 'pending' ? 'Approved · Payout pending' : order.status}</dd></div>
+          <div><dt>Provider reference</dt><dd>{order.provider_txn_id || (awaitingApproval || order.approval_state === 'declined' ? '—' : 'Not recorded — payment outcome must be checked')}</dd></div>
           <div><dt>Last recorded message</dt><dd>{order.message || '—'}</dd></div>
           <div><dt>Current game wallet</dt><dd>{money(order.wallet_balance)}</dd></div>
         </dl>
@@ -148,9 +159,13 @@ export default function WithdrawalReview({ orderId, onClose, onResolved, onUnaut
           <small>Audit reference: {review.resolution.id}</small>
         </div> : order.status !== 'pending' ? <p>This withdrawal is already closed.</p>
           : uncertain ? <p>Check the current record before continuing.</p>
-          : !review?.canResolve ? <p>This transfer may still be processing. Review is available after three minutes from the request. Refresh status in {order.wait_seconds} seconds.</p>
+          : !awaitingApproval && !review?.canResolve ? <p>This transfer may still be processing. Refresh status in {order.wait_seconds} seconds.</p>
           : <>
             {!confirming ? <form className="withdraw-review-form" onSubmit={continueReview}>
+              {awaitingApproval ? <fieldset><legend>Withdrawal decision</legend>
+                <label><input type="radio" name="decision" value="approve" checked={decision === 'approve'} onChange={() => setDecision('approve')} />Approve and send automatically</label>
+                <label><input type="radio" name="decision" value="decline" checked={decision === 'decline'} onChange={() => setDecision('decline')} />Decline and refund the player</label>
+              </fieldset> : <>
               <fieldset><legend>Confirmed MyanPay outcome</legend>
                 <label><input type="radio" name="decision" value="mark_paid" checked={decision === 'mark_paid'} onChange={() => { setDecision('mark_paid'); setChecked(false); }} />Money was sent — mark paid</label>
                 <label><input type="radio" name="decision" value="refund" checked={decision === 'refund'} disabled={!review.canRefund} onChange={() => { setDecision('refund'); setChecked(false); }} />Failed, no money sent — refund game wallet</label>
@@ -159,13 +174,14 @@ export default function WithdrawalReview({ orderId, onClose, onResolved, onUnaut
               {decision === 'mark_paid' ? <label>Completed provider transaction reference<input value={reference} onChange={(e) => setReference(e.target.value)} maxLength={160} required autoComplete="off" /></label> : null}
               <label>Reason / provider evidence<textarea value={reason} onChange={(e) => setReason(e.target.value)} minLength={10} maxLength={500} required placeholder="Record the final provider status and how you verified it." /></label>
               <label className="withdraw-review-check"><input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />{decision === 'refund' ? 'I verified the transfer finally failed or was cancelled, and no money was sent. A missing entry or timeout alone is not confirmation.' : 'I checked MyanPay: this exact amount was sent to this recipient under the reference above.'}</label>
+              </>}
               <button className="withdraw-review-primary" type="submit" disabled={!formValid}>Continue</button>
             </form> : <form className="withdraw-review-form" onSubmit={(event) => void submit(event)}>
-              <div className="withdraw-review-confirm"><strong>{decision === 'refund' ? `Refund ${money(order.amount)} to the game wallet?` : `Record ${money(order.amount)} as already paid?`}</strong><p>{reason}</p>{decision === 'mark_paid' ? <small>Provider reference: {reference}</small> : null}</div>
+              <div className="withdraw-review-confirm"><strong>{decision === 'approve' ? `Approve and send ${money(order.amount)} to ${order.payout_phone}?` : decision === 'decline' || decision === 'refund' ? `Refund ${money(order.amount)} to the game wallet?` : `Record ${money(order.amount)} as already paid?`}</strong>{!approvalDecision ? <p>{reason}</p> : null}{decision === 'mark_paid' ? <small>Provider reference: {reference}</small> : null}</div>
               <label>Type the amount to confirm<input name="confirmation_amount" inputMode="numeric" value={amountConfirmation} onChange={(e) => setAmountConfirmation(e.target.value)} autoComplete="off" required disabled={busy} /></label>
               <label>Admin password<input name="review_password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" maxLength={4096} required disabled={busy} /></label>
               {review.mfaRequired ? <label>Fresh authenticator code<input name="review_code" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} autoComplete="one-time-code" maxLength={6} required disabled={busy} /></label> : null}
-              <div className="withdraw-review-actions"><button type="button" disabled={busy} onClick={() => { setConfirming(false); setPassword(''); setCode(''); }}>Back</button><button className="withdraw-review-primary" type="submit" disabled={busy || amountConfirmation !== order.amount || !password || (review.mfaRequired && !/^\d{6}$/.test(code))}>{busy ? 'Saving…' : decision === 'refund' ? 'Confirm refund' : 'Confirm paid'}</button></div>
+              <div className="withdraw-review-actions"><button type="button" disabled={busy} onClick={() => { setConfirming(false); setPassword(''); setCode(''); }}>Back</button><button className="withdraw-review-primary" type="submit" disabled={busy || amountConfirmation !== order.amount || !password || (review.mfaRequired && !/^\d{6}$/.test(code))}>{busy ? 'Saving…' : actionLabel}</button></div>
             </form>}
           </>}
       </> : null}

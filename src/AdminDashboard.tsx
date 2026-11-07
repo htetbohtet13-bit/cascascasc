@@ -66,7 +66,7 @@ function date(value: string | null | undefined) {
 }
 
 function Status({ value }: { value: string }) {
-  return <span className={`admin-status ${value}`}>{value}</span>;
+  return <span className={`admin-status ${value}`}>{value === "awaiting_approval" ? "Awaiting approval" : value === "declined" ? "Declined · Refunded" : value}</span>;
 }
 
 function TableEmpty({ loading }: { loading: boolean }) {
@@ -333,7 +333,7 @@ export default function AdminDashboard() {
               {(section === "deposits" || section === "withdrawals") ? (
                 <select className="admin-filter" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} aria-label="Filter by status">
                   <option value="">All statuses</option>
-                  {(section === "deposits" ? ["verified", "pending", "failed"] : ["pending", "paid", "failed"]).map((value) => <option key={value} value={value}>{value}</option>)}
+                  {(section === "deposits" ? ["verified", "pending", "failed"] : ["awaiting_approval", "pending", "paid", "failed", "declined"]).map((value) => <option key={value} value={value}>{value === "awaiting_approval" ? "Awaiting approval" : value}</option>)}
                 </select>
               ) : null}
               <span className="admin-record-count">{total.toLocaleString()} records</span>
@@ -612,7 +612,7 @@ function BetsTable({ bets, loading, onSelect, compact = false }: { bets: BetRow[
 
 function WalletTable({ rows, loading, onSelect, kind, compact = false, onReview }: { rows: WalletRow[]; loading: boolean; onSelect: (id: string) => void; kind: "deposit" | "withdrawal"; compact?: boolean; onReview?: (orderId: string) => void }) {
   if (!rows.length) return <TableEmpty loading={loading} />;
-  return <div className={`admin-table-wrap${compact ? " compact" : ""}`}><table className="admin-table"><thead><tr><th>Player</th><th>Method</th><th>{kind === "deposit" ? "Receipt reference" : "Payout phone"}</th><th>Amount</th><th>Status</th><th>Date</th>{onReview ? <th>Review</th> : null}</tr></thead><tbody>{rows.map((row) => <tr key={row.order_id}><td><button type="button" className="admin-player-link" onClick={() => onSelect(row.user_id)}>{row.phone}</button><small>{row.order_id}</small></td><td>{row.service_type === "kbzpay" ? "KBZPay" : "WavePay"}</td><td>{row.reference || row.payout_phone || row.provider_txn_id || "—"}</td><td className="admin-number">{money(row.amount)}{Number(row.bonus_amount) > 0 ? <small>Bonus +{money(row.bonus_amount)}</small> : null}</td><td><Status value={row.status} /></td><td>{date(row.created_at)}</td>{onReview ? <td><button type="button" className="admin-row-action" onClick={() => onReview(row.order_id)}>{row.status === 'pending' ? 'Resolve' : 'Details'}</button></td> : null}</tr>)}</tbody></table></div>;
+  return <div className={`admin-table-wrap${compact ? " compact" : ""}`}><table className="admin-table"><thead><tr><th>Player</th><th>Method</th><th>{kind === "deposit" ? "Receipt reference" : "Payout phone"}</th><th>Amount</th><th>Status</th><th>Date</th>{onReview ? <th>Review</th> : null}</tr></thead><tbody>{rows.map((row) => <tr key={row.order_id}><td><button type="button" className="admin-player-link" onClick={() => onSelect(row.user_id)}>{row.phone}</button><small>{row.order_id}</small></td><td>{row.service_type === "kbzpay" ? "KBZPay" : "WavePay"}</td><td>{row.reference || row.payout_phone || row.provider_txn_id || "—"}</td><td className="admin-number">{money(row.amount)}{Number(row.bonus_amount) > 0 ? <small>Bonus +{money(row.bonus_amount)}</small> : null}</td><td><Status value={row.status} /></td><td>{date(row.created_at)}</td>{onReview ? <td><button type="button" className="admin-row-action" onClick={() => onReview(row.order_id)}>{row.status === 'awaiting_approval' ? 'Review' : row.status === 'pending' ? 'Resolve' : 'Details'}</button></td> : null}</tr>)}</tbody></table></div>;
 }
 
 function DetailBets({ bets }: { bets: BetRow[] }) {
@@ -620,5 +620,5 @@ function DetailBets({ bets }: { bets: BetRow[] }) {
 }
 
 function DetailWallet({ title, rows, onReview }: { title: string; rows: WalletRow[]; onReview?: (orderId: string) => void }) {
-  return <section className="admin-panel"><div className="admin-panel-heading"><div><span>PLAYER WALLET</span><h3>{title}</h3></div></div>{rows.length ? <div className="admin-detail-records">{rows.map((row) => <div key={row.order_id}><span>{row.service_type === "kbzpay" ? "KBZPay" : "WavePay"}<small>{date(row.created_at)}</small>{onReview ? <button className="admin-row-action" type="button" onClick={() => onReview(row.order_id)}>{row.status === 'pending' ? 'Resolve' : 'Details'}</button> : null}</span><strong>{money(row.amount)}{Number(row.bonus_amount) > 0 ? <small>Bonus +{money(row.bonus_amount)}</small> : null}<small><Status value={row.status} /></small></strong></div>)}</div> : <TableEmpty loading={false} />}</section>;
+  return <section className="admin-panel"><div className="admin-panel-heading"><div><span>PLAYER WALLET</span><h3>{title}</h3></div></div>{rows.length ? <div className="admin-detail-records">{rows.map((row) => <div key={row.order_id}><span>{row.service_type === "kbzpay" ? "KBZPay" : "WavePay"}<small>{date(row.created_at)}</small>{onReview ? <button className="admin-row-action" type="button" onClick={() => onReview(row.order_id)}>{row.status === 'awaiting_approval' ? 'Review' : row.status === 'pending' ? 'Resolve' : 'Details'}</button> : null}</span><strong>{money(row.amount)}{Number(row.bonus_amount) > 0 ? <small>Bonus +{money(row.bonus_amount)}</small> : null}<small><Status value={row.status} /></small></strong></div>)}</div> : <TableEmpty loading={false} />}</section>;
 }

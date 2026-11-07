@@ -1,6 +1,6 @@
 type Props = {
   kind: "deposit" | "withdraw";
-  state: "processing" | "success" | "pending" | "failed";
+  state: "processing" | "success" | "pending" | "failed" | "awaiting_approval" | "declined";
   amount: number;
   bonusAmount?: number;
   bank?: { name: string; image: string };
@@ -11,10 +11,11 @@ type Props = {
   onRetry?: () => void;
 };
 
-export default function PaymentResult({ kind, state, amount, bonusAmount = 0, bank, phone, message, onClose, onHistory, onRetry }: Props) {
+export default function PaymentResult({ kind, state: result, amount, bonusAmount = 0, bank, phone, message, onClose, onHistory, onRetry }: Props) {
+  const state = result === "awaiting_approval" ? "pending" : result === "declined" ? "failed" : result;
   const processing = state === "processing";
   const success = state === "success";
-  const title = processing
+  const title = result === "awaiting_approval" ? "အတည်ပြုချက် စောင့်နေပါသည်" : result === "declined" ? "ငွေပြန်ဖြည့်ပေးထားပါသည်" : processing
     ? kind === "deposit" ? "ငွေသွင်းမှု စစ်ဆေးနေပါသည်" : "ငွေလွှဲနေပါသည်"
     : success
       ? kind === "deposit" ? "ငွေသွင်းအောင်မြင်ပါသည်" : "ငွေထုတ်ခြင်း အောင်မြင်ပါသည်။"

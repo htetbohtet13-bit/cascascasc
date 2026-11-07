@@ -1,4 +1,5 @@
 import { GAME_ACTIVITY_CTE } from "./game-history.mjs";
+import { WITHDRAWAL_DISPLAY_STATUS_SQL } from './payout-security.mjs';
 
 const MYANMAR_OFFSET = 390 * 60 * 1000;
 const DAY = 24 * 60 * 60 * 1000;
@@ -59,7 +60,7 @@ export async function readAdminOverview(pool, range) {
   );
   const [latestWithdrawals, latestBets] = await Promise.all([
     pool.query(
-      `select w.order_id, w.user_id, p.phone, w.service_type, w.amount, w.status, w.created_at
+      `select w.order_id, w.user_id, p.phone, w.service_type, w.amount, ${WITHDRAWAL_DISPLAY_STATUS_SQL} as status, w.created_at
          from public.withdrawals w join public.profiles p on p.id = w.user_id
         where ${inRange("coalesce(w.completed_at, w.created_at)")}
         order by coalesce(w.completed_at, w.created_at) desc, w.order_id limit 8`, params,

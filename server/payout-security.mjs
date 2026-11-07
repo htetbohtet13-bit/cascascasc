@@ -1,4 +1,7 @@
 // Loss limits are server settings, never values supplied by a player.
+export const WITHDRAWAL_APPROVAL_THRESHOLD = 400_000;
+export const WITHDRAWAL_DISPLAY_STATUS_SQL = "case w.approval_state when 'awaiting' then 'awaiting_approval' when 'declined' then 'declined' else w.status end";
+
 function configuredLimit(name, fallback) {
   const value = String(process.env[name] ?? "").trim();
   if (!value) return BigInt(fallback);

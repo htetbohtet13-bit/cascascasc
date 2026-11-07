@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { loadWalletMethods, submitWithdraw, WalletRequestError, type PayMethod, type WalletMethods } from "./lib/wallet";
+import { loadWalletMethods, submitWithdraw, WalletRequestError, type PayMethod, type WalletMethods, type WithdrawResult } from "./lib/wallet";
 import PaymentResult from "./PaymentResult";
 
 type Props = {
@@ -43,7 +43,7 @@ export default function Wallet({
   const [error, setError] = useState("");
   const [wageringError, setWageringError] = useState("");
   const [done, setDone] = useState("");
-  const [doneState, setDoneState] = useState<"paid" | "pending" | "failed">("paid");
+  const [doneState, setDoneState] = useState<WithdrawResult["state"]>("paid");
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const submitting = useRef(false);
   const [bankConfig, setBankConfig] = useState<WalletMethods | null>(null);
@@ -268,6 +268,7 @@ export default function Wallet({
                 <div><dt>ငွေထုတ်ပမာဏ</dt><dd>{numericAmount.toLocaleString("en-US")} ကျပ်</dd></div>
               </dl>
             </section>
+            {bankConfig && numericAmount > bankConfig.withdrawalApprovalThreshold ? <p className="wallet-title">ဤငွေထုတ်မှုကို အက်ဒမင် အတည်ပြုပြီးမှ ငွေလွှဲပေးပါမည်။</p> : null}
             {error ? <p className="error withdraw-error" role="alert">{error}</p> : null}
             <div className="withdraw-actions">
               <button className="withdraw-edit" type="button" onClick={() => goToStep(2)} disabled={busy}>ပြင်မည်</button>

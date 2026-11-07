@@ -64,6 +64,36 @@ test('opening and closing the review is read-only; refund needs evidence and a s
   assert.deepEqual(app.counts(),{closed:1,resolved:0});
 });
 
+test('large withdrawal decisions use amount and password confirmation and display the resulting payout or refund', async () => {
+  for (const decision of ['approve', 'decline']) {
+    const withdrawal = { ...review().withdrawal, amount: '400001', approval_state: 'awaiting' };
+    const app = harness(async (_url, init) => {
+      if (!init?.method) return response(review({ withdrawal, canResolve: false, canRefund: false }));
+      const sent = JSON.parse(init.body);
+      assert.equal(sent.decision, decision);
+      assert.equal(sent.confirmation_amount, '400001');
+      assert.equal(sent.reason, '');
+      return response(review({ ok: true, canResolve: false, canRefund: false, withdrawal: {
+        ...withdrawal, status: decision === 'approve' ? 'paid' : 'failed',
+        approval_state: decision === 'approve' ? 'approved' : 'declined',
+      } }));
+    });
+    await app.settle();
+    assert.equal(find(app.render(), node => node.type === 'textarea'), null);
+    find(app.render(), node => node.type === 'input' && node.props.value === decision).props.onChange();
+    find(app.render(), node => node.type === 'form').props.onSubmit({ preventDefault() {} });
+    const submit = find(app.render(), node => node.type === 'form').props.onSubmit;
+    submit({ preventDefault() {} }); await app.settle();
+    assert.equal(app.calls.length, 1);
+    app.input('confirmation_amount', '400001');
+    app.input('review_password', 'test-only-review-password');
+    find(app.render(), node => node.type === 'form').props.onSubmit({ preventDefault() {} });
+    await app.settle();
+    assert.equal(app.counts().resolved, 1);
+    assert.ok(text(app.render()).includes(decision === 'approve' ? 'paid' : 'Declined · Refunded'));
+  }
+});
+
 test('double submit sends one admin request, clears credentials and shows the recorded refund', async () => {
   let complete; let submitted;
   const app=harness(async (url, init) => {

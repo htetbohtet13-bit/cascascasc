@@ -42,7 +42,7 @@ async function migration(name) {
 }
 before(async () => {
   mock.method(console, "info", () => {});
-  for (const name of ["001_app_schema.sql", "005_skm_seamless_wallet.sql", "008_deposit_wagering.sql", "010_money_constraints.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql", "016_deposit_bank_settings.sql"]) await migration(name);
+  for (const name of ["001_app_schema.sql", "005_skm_seamless_wallet.sql", "008_deposit_wagering.sql", "010_money_constraints.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql", "016_deposit_bank_settings.sql", "017_withdrawal_approval.sql"]) await migration(name);
 });
 beforeEach(async () => {
   await db.exec("insert into public.deposit_bonus_campaign(singleton,starts_at) values(true,'infinity') on conflict(singleton) do update set starts_at=excluded.starts_at");
@@ -190,6 +190,8 @@ test("withdrawal and refund preserve the maximum supported balance exactly", asy
   const user = await player(MAX_MONEY);
   const orderId = randomUUID();
   assert.equal((await reserve(user, Number(MAX_MONEY - 1n), orderId)).balance, 1);
+  assert.equal((await releaseWithdraw({ userId: user.userId, orderId, message: "rejected" })).state, "awaiting_approval");
+  await db.query(`update public.withdrawals set approval_state='approved', approval_decided_at=now(), approval_admin_hash=$2 where order_id=$1`, [orderId, "a".repeat(64)]);
   assert.equal((await releaseWithdraw({ userId: user.userId, orderId, message: "rejected" })).balance, Number(MAX_MONEY));
   assert.equal(await balance(user), String(MAX_MONEY));
   assert.equal((await releaseWithdraw({ userId: user.userId, orderId, message: "repeated" })).balance, Number(MAX_MONEY));
@@ -615,21 +617,21 @@ test("a fabricated deposit verification in the browser cannot replace gateway ve
   assert.equal(payment.mock.callCount(), 1);
 });
 
-test("default limits allow exactly 1000000 Ks and three paid withdrawals per Myanmar day", async (t) => {
+test("default limits reject above 1000000 Ks and allow three automatic withdrawals per Myanmar day", async (t) => {
   paymentEnv(t); const user = await player(5000000);
   const payment = t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ success: true, message: "transfer_success", data: { transaction_id: randomUUID() } })));
   assert.equal((await proxyWithdraw(withdrawPayload({ amount: 1000001 }))).body.code, "WITHDRAW_LIMIT");
   assert.equal(payment.mock.callCount(), 0); assert.equal(await balance(user), "5000000");
   let last;
   for (let index = 0; index < 3; index++) {
-    last = withdrawPayload({ amount: 1000000 });
+    last = withdrawPayload({ amount: 400000 });
     assert.equal((await proxyWithdraw(last)).body.state, "paid");
   }
   assert.equal((await proxyWithdraw(last)).body.state, "paid");
   const blocked = await proxyWithdraw(withdrawPayload({ max_per_day: 9999, withdraw_count: 0 }));
   assert.equal(blocked.status, 403); assert.equal(blocked.body.code, "WITHDRAW_DAILY_LIMIT");
   assert.match(blocked.body.error, /[\u1000-\u109f]/);
-  assert.equal(payment.mock.callCount(), 3); assert.equal(await balance(user), "2000000");
+  assert.equal(payment.mock.callCount(), 3); assert.equal(await balance(user), "3800000");
 });
 
 test("many concurrent payout requests and changed IDs produce one transfer while its outcome is pending", async (t) => {

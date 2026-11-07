@@ -25,7 +25,7 @@ const env = { admin_secret: "test-bank-switch-admin-secret", ADMIN_MFA_REQUIRED:
 const saved = Object.fromEntries([...Object.keys(env), "ADMIN_TOTP_SECRET"].map(k => [k, process.env[k]]));
 async function migration(name) { await db.exec((await readFile(new URL(`../neon/${name}`, import.meta.url), "utf8")).replaceAll("create extension if not exists pgcrypto;", "")); }
 before(async () => {
-  for (const file of ["001_app_schema.sql", "002_phone_auth.sql", "005_skm_seamless_wallet.sql", "008_deposit_wagering.sql", "009_auth_security.sql", "010_money_constraints.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql", "016_deposit_bank_settings.sql"]) await migration(file);
+  for (const file of ["001_app_schema.sql", "002_phone_auth.sql", "005_skm_seamless_wallet.sql", "008_deposit_wagering.sql", "009_auth_security.sql", "010_money_constraints.sql", "012_game_minor_units.sql", "013_first_deposit_bonus.sql", "015_withdrawal_resolution.sql", "016_deposit_bank_settings.sql", "017_withdrawal_approval.sql"]) await migration(file);
   Object.assign(process.env, env); delete process.env.ADMIN_TOTP_SECRET;
 });
 beforeEach(async () => {
@@ -43,6 +43,95 @@ async function player(balance = 0) { userId = randomUUID(); await db.query("inse
 const proxy = (functionName, payload = {}) => handleWalletProxy({ req: request({}), functionName, payload });
 const deposit = (extra = {}) => proxy("wallet-deposit", { service_type: "kbzpay", amount: 1000, transaction_id: "123456", bonus_terms_version: 1, ...extra });
 const verified = () => new Response(JSON.stringify({ success: true, message: "verified", data: { mode: "direct", provider: "kbzpay", account: env.kbzreceiver, transaction_id: "01000000123456", amount: 1000, currency: "MMK" } }));
+const withdrawal = (amount, service_type = "kbzpay") => ({ amount, service_type, phone: "09123456789", request_id: randomUUID() });
+const decisionBody = (orderId, amount, decision) => ({
+  action: "resolve_withdrawal", order_id: orderId, decision, request_id: randomUUID(),
+  expected_amount: String(amount), confirmation_amount: String(amount), password: env.admin_secret,
+});
+const decide = (cookie, body) => handleAdminApi(request(body, cookie));
+
+test("exactly 400000 pays automatically; above it only an admin approval can send the original reserved payout once", async (t) => {
+  await player(1500000);
+  const cookie = await login();
+  let startPayout;
+  let finishPayout;
+  const payoutStarted = new Promise(resolve => { startPayout = resolve; });
+  const fetch = t.mock.method(globalThis, "fetch", async (_url, options) => {
+    const { amount, phone, provider } = JSON.parse(options.body);
+    if (amount === 1000000) {
+      startPayout();
+      await new Promise(resolve => { finishPayout = resolve; });
+    }
+    return new Response(JSON.stringify({ success: true, message: "transfer_success", data: { transaction_id: randomUUID(), amount, recipient: phone, provider } }));
+  });
+  assert.equal((await proxy("wallet-withdraw", withdrawal(400000))).body.state, "paid");
+  const large = withdrawal(1000000, "wavepay");
+  const held = await proxy("wallet-withdraw", { ...large, decision: "approve" });
+  assert.equal(held.body.state, "awaiting_approval");
+  assert.equal(held.body.balance, 100000);
+  assert.equal((await proxy("wallet-withdraw", large)).body.state, "awaiting_approval");
+  const list = await handleAdminApi({ ...request(null, cookie, "GET"), url: "/api/admin?view=withdrawals&status=awaiting_approval" });
+  assert.equal(list.body.total, 1);
+  assert.equal(list.body.withdrawals[0].order_id, held.body.orderId);
+  const decision = decisionBody(held.body.orderId, large.amount, "approve");
+  assert.equal((await decide("", decision)).status, 401);
+  assert.equal((await decide(cookie, { ...decision, confirmation_amount: "1" })).status, 400);
+  await set(cookie, "wavepay", false);
+  assert.equal((await decide(cookie, decision)).body.code, "BANK_UNAVAILABLE");
+  assert.equal(fetch.mock.callCount(), 1);
+  await set(cookie, "wavepay", true);
+  const approving = decide(cookie, decision);
+  await Promise.race([payoutStarted, approving.then(result => { assert.fail(`Approval stopped before payout with status ${result.status}`); })]);
+  const attempts = await Promise.all([decide(cookie, decision), decide(cookie, { ...decision, decision: "decline" })]);
+  finishPayout();
+  assert.ok(attempts.every(result => result.status === 409));
+  assert.equal((await approving).body.withdrawal.status, "paid");
+  const finished = (await proxy("wallet-withdraw", large)).body;
+  assert.equal(finished.state, "paid");
+  assert.equal(finished.balance, 100000);
+  assert.equal(fetch.mock.callCount(), 2);
+  assert.deepEqual(JSON.parse(fetch.mock.calls[1].arguments[1].body), { cmd: "transfer", provider: "wave", account: env.wavereceiver, phone: large.phone, amount: large.amount, note: "payment" });
+});
+
+test("decline refunds exactly once, is visible in player history and sends no payment", async (t) => {
+  const id = await player(700000);
+  await db.query("update public.profiles set balance_minor = 60 where id=$1", [id]);
+  const cookie = await login();
+  const fetch = t.mock.method(globalThis, "fetch", async () => { throw new Error("No payout expected"); });
+  const payout = withdrawal(400001);
+  const held = (await proxy("wallet-withdraw", payout)).body;
+  assert.equal((await proxy("wallet-history")).body.history[0].status, "awaiting_approval");
+  await migration("017_withdrawal_approval.sql");
+  assert.equal((await proxy("wallet-withdraw", payout)).body.state, "awaiting_approval");
+  const decision = decisionBody(held.orderId, payout.amount, "decline");
+  const attempts = await Promise.all([decide(cookie, decision), decide(cookie, decision)]);
+  assert.equal(attempts.filter(result => result.status === 200).length, 1);
+  assert.equal((await decide(cookie, { ...decision, decision: "approve" })).status, 409);
+  assert.equal((await proxy("wallet-history")).body.history[0].status, "declined");
+  assert.equal((await proxy("wallet-withdraw", payout)).body.state, "declined");
+  assert.deepEqual((await db.query("select balance::text, balance_minor from public.profiles where id=$1", [id])).rows[0], { balance: "700000", balance_minor: 60 });
+  assert.equal(fetch.mock.callCount(), 0);
+});
+
+test("an uncertain approved payout cannot be sent again or immediately refunded even for an old request", async (t) => {
+  await player(600000);
+  const cookie = await login();
+  const fetch = t.mock.method(globalThis, "fetch", async () => { throw new Error("Uncertain payment outcome"); });
+  const payout = withdrawal(500000);
+  const held = (await proxy("wallet-withdraw", payout)).body;
+  await db.query("update public.withdrawals set created_at = now() - interval '1 day' where order_id=$1", [held.orderId]);
+  const decision = decisionBody(held.orderId, payout.amount, "approve");
+  const refund = { ...decision, decision: "refund", checked_provider: true, reason: "Test manual reconciliation" };
+  assert.equal((await decide(cookie, refund)).body.code, "APPROVAL_REQUIRED");
+  const result = await decide(cookie, decision);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.withdrawal.status, "pending");
+  assert.equal(result.body.canRefund, false);
+  assert.equal((await decide(cookie, refund)).body.code, "STILL_PROCESSING");
+  assert.equal((await decide(cookie, decision)).status, 409);
+  assert.equal((await proxy("wallet-withdraw", payout)).body.state, "pending");
+  assert.equal(fetch.mock.callCount(), 1);
+});
 
 test("bank settings require a current admin session and trusted origin; rejected changes leave both banks enabled", async () => {
   assert.equal((await set("", "kbzpay", false)).status, 401);
